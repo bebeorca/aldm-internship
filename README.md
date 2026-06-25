@@ -154,6 +154,12 @@ docker compose up --build
 docker compose exec backend sh
 ```
 
+### Access Frontend Container
+
+```bash
+docker compose exec frontend sh
+```
+
 ### Laravel Commands
 
 ```bash
