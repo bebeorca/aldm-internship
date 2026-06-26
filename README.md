@@ -1,6 +1,6 @@
 # SURAT
 
-Sistem Penyuratan berbasis web yang digunakan untuk mengelola proses pembuatan, pengajuan, dan pengarsipan surat secara digital.
+Web-based correspondence management system for creating, submitting, managing, and archiving digital documents efficiently.
 
 ---
 
@@ -18,7 +18,11 @@ Sistem Penyuratan berbasis web yang digunakan untuk mengelola proses pembuatan, 
 
 ### Database
 
-* MySQL 8
+* PostgreSQL 17
+
+### Database Management
+
+* pgAdmin 4
 
 ### DevOps
 
@@ -47,10 +51,13 @@ SURAT/
 
 ## Requirements
 
-* Docker Desktop
+Make sure the following tools are installed:
+
+* Docker Desktop / Docker Engine
+* Docker Compose
 * Git
 
-No additional installation such as PHP, Composer, Node.js, MySQL, or XAMPP is required.
+No need to install PHP, Composer, Node.js, PostgreSQL, or other local dependencies manually.
 
 ---
 
@@ -63,32 +70,46 @@ git clone <repository-url>
 cd SURAT
 ```
 
+---
+
 ### 2. Configure Environment
 
-Create a Laravel environment file:
+Create Laravel environment file:
 
 ```bash
-copy backend/.env.example backend/.env
+cp backend/.env.example backend/.env
 ```
 
-Configure the database inside `.env`:
+Configure PostgreSQL connection inside `backend/.env`
 
 ```env
-DB_CONNECTION=mysql
-DB_HOST=mysql
-DB_PORT=3306
+DB_CONNECTION=pgsql
+DB_HOST=postgres
+DB_PORT=5432
 DB_DATABASE=app
-DB_USERNAME=root
-DB_PASSWORD=root
+DB_USERNAME=postgres
+DB_PASSWORD=postgres123
 ```
 
+Recommended local development configuration:
+
+```env
+SESSION_DRIVER=file
+QUEUE_CONNECTION=sync
+CACHE_STORE=file
+```
+
+---
+
 ### 3. Build and Run Containers
+
+Build project containers:
 
 ```bash
 docker compose up --build
 ```
 
-Or run in detached mode:
+Run in detached mode:
 
 ```bash
 docker compose up --build -d
@@ -98,19 +119,19 @@ docker compose up --build -d
 
 ## Laravel Setup
 
-Generate application key:
+### Generate Application Key
 
 ```bash
 docker compose exec backend php artisan key:generate
 ```
 
-Run database migrations:
+### Run Database Migration
 
 ```bash
 docker compose exec backend php artisan migrate
 ```
 
-Run seeders:
+### Run Seeder (Optional)
 
 ```bash
 docker compose exec backend php artisan db:seed
@@ -118,13 +139,35 @@ docker compose exec backend php artisan db:seed
 
 ---
 
-## Access Application
+## Available Services
 
-| Service  | URL                   |
-| -------- | --------------------- |
-| Frontend | http://localhost:3000 |
-| Backend  | http://localhost:8000 |
-| Database | localhost:3306        |
+| Service    | URL                   |
+| ---------- | --------------------- |
+| Frontend   | http://localhost:3000 |
+| Backend    | http://localhost:8000 |
+| PostgreSQL | localhost:5432        |
+| pgAdmin    | http://localhost:8080 |
+
+---
+
+## pgAdmin Login
+
+Default login credentials:
+
+```text
+Email: admin@local.com
+Password: admin123
+```
+
+To connect PostgreSQL server inside pgAdmin:
+
+```text
+Host: postgres
+Port: 5432
+Username: postgres
+Password: postgres123
+Database: app
+```
 
 ---
 
@@ -142,53 +185,81 @@ docker compose up -d
 docker compose down
 ```
 
+### Remove Containers + Volumes
+
+```bash
+docker compose down -v
+```
+
 ### Rebuild Containers
 
 ```bash
 docker compose up --build
 ```
 
-### Access Backend Container
+---
+
+## Container Access
+
+### Backend Container
 
 ```bash
 docker compose exec backend sh
 ```
 
-### Access Frontend Container
+### Frontend Container
 
 ```bash
 docker compose exec frontend sh
 ```
 
-### Laravel Commands
+---
+
+## Laravel Commands
+
+Run migration:
 
 ```bash
 docker compose exec backend php artisan migrate
+```
 
+Fresh migration:
+
+```bash
 docker compose exec backend php artisan migrate:fresh
+```
 
+Clear cache:
+
+```bash
 docker compose exec backend php artisan optimize:clear
+```
+
+Check Laravel info:
+
+```bash
+docker compose exec backend php artisan about
 ```
 
 ---
 
 ## Development Workflow
 
-1. Pull the latest changes:
+Pull latest changes:
 
 ```bash
 git pull
 ```
 
-2. Start containers:
+Start containers:
 
 ```bash
 docker compose up -d
 ```
 
-3. Develop features normally.
+Develop features normally.
 
-4. Commit changes:
+Commit changes:
 
 ```bash
 git add .
@@ -207,10 +278,17 @@ git pull
 docker compose up --build
 ```
 
-If only application code changes:
+If only source code changes:
 
 ```bash
 git pull
+docker compose up -d
+```
+
+If database schema changes:
+
+```bash
+docker compose exec backend php artisan migrate
 ```
 
 ---
