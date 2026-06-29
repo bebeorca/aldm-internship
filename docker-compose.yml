@@ -3,7 +3,13 @@ services:
     build: ./frontend
     container_name: surat_frontend
     ports:
-      - "3000:3000"
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
     depends_on:
       - backend
 
@@ -12,6 +18,9 @@ services:
     container_name: surat_backend
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - /app/vendor
     depends_on:
       - postgres
 
