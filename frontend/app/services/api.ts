@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: 'http://localhost:8000/api',
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -24,6 +24,10 @@ api.interceptors.response.use(
 
 export const templateService = {
   getAll: () => api.get('/templates'),
+  create: (data: FormData) =>                              // ← ditambah
+    api.post('/templates', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
 };
 
 export const letterService = {

@@ -1,4 +1,3 @@
-// app/routes.ts
 import {
   type RouteConfig,
   route,
@@ -9,13 +8,11 @@ import {
 
 export default [
   layout("routes/_layout.tsx", [
-    // index("routes/dashboard/index.tsx"),
     route("dashboard", "routes/dashboard/index.tsx"),
+    route("dashboard/templates", "routes/dashboard/templates/index.tsx"),      // ← ditambah
+    route("dashboard/templates/new", "routes/dashboard/templates/new.tsx"),    // ← ditambah
     route("letters", "routes/letters/index.tsx"),
     route("letters/create/mou", "routes/letters/mou.tsx"),
-    // route("letters/:id", "routes/letters/$id/index.tsx"),
     route("approval", "routes/approval/index.tsx"),
-    // route("sync", "routes/sync/index.tsx"),
-    // route("settings/signature", "routes/settings/signature.tsx"),
   ]),
 ] satisfies RouteConfig;

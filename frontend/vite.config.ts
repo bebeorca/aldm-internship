@@ -7,4 +7,13 @@ export default defineConfig({
   resolve: {
     tsconfigPaths: true,
   },
+  server: {
+    host: true,
+    proxy: {
+      '/api': {
+        target: 'http://backend:8000',  // ← nama service Docker
+        changeOrigin: true,
+      },
+    },
+  },
 });

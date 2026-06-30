@@ -1,5 +1,3 @@
-// src/types/index.ts
-
 export type Role = 'pembuat' | 'direktur' | 'admin';
 
 export type LetterStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected';
@@ -15,10 +13,13 @@ export interface User {
 export interface Template {
   id: number;
   nama: string;
+  path_docx: string | null;
   jenis_surat: string;
   variabel: string[];
   is_active: boolean;
-  created_by: number;
+  created_by: number | null;
+  created_at?: string;   // ← ditambah
+  updated_at?: string;   // ← ditambah
 }
 
 export interface Letter {
