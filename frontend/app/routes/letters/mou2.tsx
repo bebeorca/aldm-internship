@@ -5,7 +5,7 @@ import {
   CheckCircle2, AlertCircle, Check, Bold, Italic, Underline, List,
 } from 'lucide-react';
 import mammoth from 'mammoth';
-import { templateService } from '../../services/api';
+import { letterService, templateService } from '../../services/api';
 import type { Template } from '../../types';
 import Base from '~/components/ui/Base';
 import ErrorAlert from '~/components/ui/ErrorAlert';
@@ -34,7 +34,7 @@ function parseCsv(text: string): Record<string, string> {
   const lines = text.trim().split('\n').filter(Boolean);
   if (lines.length < 2) return {};
   const headers = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
-  const values  = lines[1].split(',').map((v) => v.trim().replace(/^"|"$/g, ''));
+  const values = lines[1].split(',').map((v) => v.trim().replace(/^"|"$/g, ''));
   const result: Record<string, string> = {};
   headers.forEach((h, i) => { result[h] = values[i] ?? ''; });
   return result;
@@ -45,31 +45,58 @@ function formatLabel(key: string): string {
 }
 
 export default function MouTwoPage() {
-  const navigate      = useNavigate();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const csvRef        = useRef<HTMLInputElement>(null);
-  const attachRef     = useRef<HTMLInputElement>(null);
+  const csvRef = useRef<HTMLInputElement>(null);
+  const attachRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState<Step>('template');
 
   // Template list (step 1)
-  const [templates, setTemplates]   = useState<Template[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [loadingList, setLoadingList] = useState(true);
-  const [listError, setListError]   = useState('');
+  const [listError, setListError] = useState('');
 
   // Selected template + form (step 2)
-  const [selected, setSelected]       = useState<Template | null>(null);
-  const [formData, setFormData]       = useState<Record<string, string>>({});
-  const [attachment, setAttachment]   = useState<File | null>(null);
+  const [selected, setSelected] = useState<Template | null>(null);
+  const [formData, setFormData] = useState<Record<string, string>>({});
+  const [attachment, setAttachment] = useState<File | null>(null);
 
   // Mammoth preview
-  const [baseHtml, setBaseHtml]           = useState('');
+  const [baseHtml, setBaseHtml] = useState('');
   const [loadingPreview, setLoadingPreview] = useState(false);
 
   // CSV
   const [csvFileName, setCsvFileName] = useState('');
-  const [csvLoading, setCsvLoading]   = useState(false);
-  const [csvMsg, setCsvMsg]           = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [csvLoading, setCsvLoading] = useState(false);
+  const [csvMsg, setCsvMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+
+  // Tambah fungsi submit
+  const handleSubmit = async () => {
+    const empty = selected?.variabel.filter((k) => !formData[k]?.trim()) ?? [];
+    if (empty.length > 0) {
+      setSubmitError(`Field belum diisi: ${empty.map(formatLabel).join(', ')}`);
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitError('');
+
+    try {
+      await letterService.create({
+        template_id: selected?.id,
+        data_surat: formData,
+      });
+      navigate('/letters'); // redirect ke arsip setelah berhasil
+    } catch {
+      setSubmitError('Gagal mengirim surat. Coba lagi.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   // Load template list
   useEffect(() => {
@@ -147,7 +174,7 @@ export default function MouTwoPage() {
     setCsvMsg(null);
 
     try {
-      const text    = await file.text();
+      const text = await file.text();
       const csvData = parseCsv(text);
 
       if (Object.keys(csvData).length === 0) {
@@ -409,8 +436,18 @@ export default function MouTwoPage() {
               <button className="px-4 py-2 text-sm border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors">
                 Simpan Draft
               </button>
-              <button className="flex items-center gap-1.5 px-4 py-2 text-sm bg-emerald-700 text-white rounded-xl hover:bg-emerald-800 transition-colors">
-                <Check size={14} /> Kirim untuk Disetujui
+              {submitError && (
+                <p className="text-xs text-red-500 mr-3">{submitError}</p>
+              )}
+              <button
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm bg-emerald-700 text-white rounded-xl hover:bg-emerald-800 disabled:opacity-50 transition-colors"
+              >
+                {submitting
+                  ? <Loader2 size={14} className="animate-spin" />
+                  : <Check size={14} />}
+                {submitting ? 'Mengirim...' : 'Kirim untuk Disetujui'}
               </button>
             </div>
           </div>
@@ -445,11 +482,10 @@ export default function MouTwoPage() {
             <p className="text-xs text-gray-400 mb-2 truncate">File: {csvFileName}</p>
           )}
           {csvMsg && (
-            <div className={`flex items-start gap-2 text-xs px-3 py-2 rounded-lg mb-3 ${
-              csvMsg.type === 'success'
-                ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                : 'bg-red-50 text-red-600 border border-red-100'
-            }`}>
+            <div className={`flex items-start gap-2 text-xs px-3 py-2 rounded-lg mb-3 ${csvMsg.type === 'success'
+              ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+              : 'bg-red-50 text-red-600 border border-red-100'
+              }`}>
               {csvMsg.type === 'success'
                 ? <CheckCircle2 size={13} className="shrink-0 mt-0.5" />
                 : <AlertCircle size={13} className="shrink-0 mt-0.5" />}
@@ -539,11 +575,10 @@ function PageShell({ step, children }: { step: 1 | 2 | 3; children: React.ReactN
         {steps.map((s, i) => (
           <div key={s.n} className="flex items-center flex-1 last:flex-none">
             <div className="flex items-center gap-2">
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium shrink-0 ${
-                s.n < step ? 'bg-emerald-500 text-white'
+              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium shrink-0 ${s.n < step ? 'bg-emerald-500 text-white'
                 : s.n === step ? 'bg-gray-800 text-white'
-                : 'bg-gray-100 text-gray-400'
-              }`}>
+                  : 'bg-gray-100 text-gray-400'
+                }`}>
                 {s.n < step ? <Check size={13} /> : s.n}
               </span>
               <span className={`text-sm whitespace-nowrap ${s.n === step ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>

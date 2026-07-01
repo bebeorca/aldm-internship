@@ -8,6 +8,7 @@ import {
 
 export default [
   layout("routes/_layout.tsx", [
+    index("routes/home/index.tsx"),
     route("dashboard", "routes/dashboard/index.tsx"),
     route("dashboard/templates", "routes/dashboard/templates/index.tsx"),      // ← ditambah
     route("dashboard/templates/new", "routes/dashboard/templates/new.tsx"),    // ← ditambah
