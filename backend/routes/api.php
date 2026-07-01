@@ -5,12 +5,17 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\SyncController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\LetterController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
 Route::get('/templates', [TemplateController::class, 'index']);
 Route::get('/templates/{template}', [TemplateController::class, 'show']);
 Route::post('/templates', [TemplateController::class, 'store']);
+
+Route::get('/letters', [LetterController::class, 'index']);
+Route::post('/letters', [LetterController::class, 'store']);
+Route::get('/letters/{letter}', [LetterController::class, 'show']);
 
 Route::get('/user', function (Request $request) {
     return $request->user();
