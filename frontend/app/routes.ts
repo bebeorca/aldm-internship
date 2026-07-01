@@ -13,6 +13,7 @@ export default [
     route("dashboard/templates/new", "routes/dashboard/templates/new.tsx"),    // ← ditambah
     route("letters", "routes/letters/index.tsx"),
     route("letters/create/mou", "routes/letters/mou.tsx"),
+    route("letters/create/mou2", "routes/letters/mou2.tsx"),   // ← ditambah
     route("approval", "routes/approval/index.tsx"),
   ]),
 ] satisfies RouteConfig;

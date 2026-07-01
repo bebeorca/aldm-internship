@@ -11,6 +11,7 @@ import { usePendingCount } from '../hooks/usePendingCount';
 
 const SUBMENU_ITEMS = [
   { to: '/letters/create/mou', label: 'MoU' },
+  { to: '/letters/create/mou2', label: 'MoU 2' },   // ← ditambah, demo sementara
 ];
 
 function UserAvatar({ nama }: { nama: string }) {

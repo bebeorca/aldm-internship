@@ -20,7 +20,6 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
-      - /app/vendor
     depends_on:
       - postgres
 

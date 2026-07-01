@@ -75,7 +75,7 @@ function TemplateCard({ template }: { template: Template }) {
         {/* Actions */}
         <div className="flex items-center gap-2 mt-3">
           <button
-            onClick={() => navigate(`/letters/create/mou?template_id=${template.id}`)}
+            onClick={() => navigate(`/letters/create/mou2?template_id=${template.id}`)}
             disabled={!hasRealFile}
             title={!hasRealFile ? 'Upload file .docx terlebih dahulu' : 'Gunakan template ini'}
             className="flex-1 text-xs font-medium py-1.5 rounded-lg border border-gray-200 text-gray-600

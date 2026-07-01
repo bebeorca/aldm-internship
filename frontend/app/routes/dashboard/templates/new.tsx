@@ -1,43 +1,74 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router';
-import { Upload, X, FileText, ChevronLeft } from 'lucide-react';
+import { Upload, X, FileText, ChevronLeft, Loader2 } from 'lucide-react';
+import mammoth from 'mammoth';
 import { templateService } from '../../../services/api';
 
 const JENIS_OPTIONS = ['BAA', 'SPK', 'MOU', 'KONTRAK'];
 
-function extractVariabel(text: string): string[] {
-  const matches = text.match(/\{\{(\w+)\}\}/g) ?? [];
-  return [...new Set(matches.map((m) => m.replace(/\{\{|\}\}/g, '')))];
-}
-
 export default function NewTemplatePage() {
   const navigate = useNavigate();
-  const [nama, setNama]               = useState('');
-  const [jenisSurat, setJenisSurat]   = useState('');
-  const [isiTemplate, setIsiTemplate] = useState('');
-  const [file, setFile]               = useState<File | null>(null);
-  const [submitting, setSubmitting]   = useState(false);
-  const [error, setError]             = useState('');
-  const fileRef = useRef<HTMLInputElement>(null);
-  
+  const fileRef  = useRef<HTMLInputElement>(null);
 
-  // Real-time: auto-extract variabel dari isi template setiap kali user mengetik
-  const variabel = extractVariabel(isiTemplate);
+  const [nama, setNama]           = useState('');
+  const [jenisSurat, setJenisSurat] = useState('');
+  const [file, setFile]           = useState<File | null>(null);
+  const [docxHtml, setDocxHtml]   = useState('');
+  const [docxVars, setDocxVars]   = useState<string[]>([]);
+  const [reading, setReading]     = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError]         = useState('');
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+
+    setFile(f);
+    setDocxHtml('');
+    setDocxVars([]);
+    setReading(true);
+    setError('');
+
+    try {
+      const arrayBuffer = await f.arrayBuffer();
+
+      // Render HTML untuk pratinjau
+      const htmlResult = await mammoth.convertToHtml({ arrayBuffer });
+      setDocxHtml(htmlResult.value);
+
+      // Extract teks bersih untuk deteksi variabel
+      const textResult = await mammoth.extractRawText({ arrayBuffer });
+      const matches = textResult.value.match(/\{\{(\w+)\}\}/g) ?? [];
+      const vars = [...new Set(matches.map(m => m.replace(/\{\{|\}\}/g, '')))];
+      setDocxVars(vars);
+    } catch {
+      setError('Gagal membaca file DOCX. Pastikan file tidak corrupt.');
+      setFile(null);
+      if (fileRef.current) fileRef.current.value = '';
+    } finally {
+      setReading(false);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setFile(null);
+    setDocxHtml('');
+    setDocxVars([]);
+    if (fileRef.current) fileRef.current.value = '';
+  };
 
   const handleSubmit = async () => {
-    if (!nama.trim() || !jenisSurat) {
-      setError('Nama template dan kategori wajib diisi.');
-      return;
-    }
+    if (!nama.trim()) { setError('Nama template wajib diisi.'); return; }
+    if (!jenisSurat)  { setError('Kategori wajib dipilih.'); return; }
+    if (!file)        { setError('File DOCX wajib diupload.'); return; }
+
     setSubmitting(true);
     setError('');
 
     const form = new FormData();
     form.append('nama', nama.trim());
     form.append('jenis_surat', jenisSurat);
-    form.append('isi_template', isiTemplate);
-    variabel.forEach((v) => form.append('variabel[]', v));
-    if (file) form.append('file_docx', file);
+    form.append('file_docx', file);
 
     try {
       await templateService.create(form);
@@ -50,26 +81,21 @@ export default function NewTemplatePage() {
   };
 
   return (
-    // FIX: hapus h-screen & overflow-hidden — keduanya bertabrakan dengan _layout.tsx
-    // Gunakan flex items-start agar right panel bisa sticky tanpa merusak scroll
     <div className="flex items-start bg-gray-50 min-h-full">
 
-      {/* ── Kiri: Form ─────────────────────────────────── */}
+      {/* ─── Kiri: Form ─── */}
       <div className="flex-1 p-8">
-
         <button
           onClick={() => navigate('/dashboard/templates')}
           className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 mb-6 transition-colors"
         >
-          <ChevronLeft size={13} />
-          Kembali ke Template
+          <ChevronLeft size={13} /> Kembali ke Template
         </button>
 
-        {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-xl font-semibold text-gray-800">Editor Template</h1>
-            <p className="text-xs text-gray-400 mt-1">Dashboard › Template › Editor Template</p>
+            <h1 className="text-xl font-semibold text-gray-800">Tambah Template</h1>
+            <p className="text-xs text-gray-400 mt-1">Dashboard › Template › Tambah Template</p>
           </div>
           <div className="flex gap-2">
             <button
@@ -80,7 +106,7 @@ export default function NewTemplatePage() {
             </button>
             <button
               onClick={handleSubmit}
-              disabled={submitting}
+              disabled={submitting || reading}
               className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-60 transition-colors"
             >
               {submitting ? 'Menyimpan...' : 'Simpan Template'}
@@ -106,7 +132,7 @@ export default function NewTemplatePage() {
               value={nama}
               onChange={(e) => setNama(e.target.value)}
               placeholder="cth: MOU Peserta Training"
-              className="w-full px-3 py-2.5 text-sm text-black bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-300"
+              className="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-300"
             />
           </div>
 
@@ -118,167 +144,108 @@ export default function NewTemplatePage() {
             <select
               value={jenisSurat}
               onChange={(e) => setJenisSurat(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm text-black bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-300"
+              className="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-300"
             >
               <option value="">Pilih kategori...</option>
-              {JENIS_OPTIONS.map((j) => (
-                <option key={j} value={j}>{j}</option>
-              ))}
+              {JENIS_OPTIONS.map((j) => <option key={j} value={j}>{j}</option>)}
             </select>
           </div>
 
-          {/* Isi Template */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Isi Template
-            </label>
-            <p className="text-xs text-gray-400 mb-2">
-              Gunakan{' '}
-              <code className="bg-gray-100 px-1 rounded font-mono text-[11px]">
-                {'{{variabel}}'}
-              </code>{' '}
-              untuk placeholder yang akan diisi saat membuat surat.
-            </p>
-            <textarea
-              value={isiTemplate}
-              onChange={(e) => setIsiTemplate(e.target.value)}
-              rows={10}
-              placeholder={'Dengan hormat,\n\nBersama surat ini kami sampaikan {{perihal}} kepada {{tujuan}}.\n\nDemikian kami sampaikan.\n\nHormat kami,\n{{pembuat}}'}
-              className="w-full px-3 py-2.5 text-sm text-black bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-300 resize-none font-mono leading-relaxed"
-            />
-
-            {/* Variabel yang terdeteksi otomatis */}
-            {variabel.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                <span className="text-[11px] text-gray-400 mr-1 self-center">Terdeteksi:</span>
-                {variabel.map((v) => (
-                  <span
-                    key={v}
-                    className="text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-mono"
-                  >
-                    {`{{${v}}}`}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Upload DOCX */}
+          {/* Upload DOCX — WAJIB */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Upload File DOCX{' '}
-              <span className="text-gray-400 font-normal">(opsional — bisa diisi belakangan)</span>
+              Upload File DOCX <span className="text-red-500">*</span>
             </label>
+            <p className="text-xs text-gray-400 mb-2">
+              Variabel di dalam file menggunakan format{' '}
+              <code className="bg-gray-100 px-1 rounded font-mono text-[11px]">{'{{nama_variabel}}'}</code>.
+              Frontend akan membaca dan mendeteksi variabel otomatis.
+            </p>
             <input
               ref={fileRef}
               type="file"
-              accept=".docx,.doc"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              accept=".docx"
+              onChange={handleFileChange}
               className="hidden"
             />
             {file ? (
               <div className="flex items-center gap-3 px-4 py-3 border border-emerald-200 bg-emerald-50 rounded-xl">
-                <FileText size={16} className="text-emerald-600 shrink-0" />
+                {reading ? (
+                  <Loader2 size={16} className="text-emerald-500 animate-spin shrink-0" />
+                ) : (
+                  <FileText size={16} className="text-emerald-600 shrink-0" />
+                )}
                 <span className="text-sm text-emerald-700 flex-1 truncate">{file.name}</span>
-                <button
-                  onClick={() => {
-                    setFile(null);
-                    if (fileRef.current) fileRef.current.value = '';
-                  }}
-                >
+                <button onClick={handleRemoveFile}>
                   <X size={14} className="text-emerald-500 hover:text-emerald-700" />
                 </button>
               </div>
             ) : (
               <button
                 onClick={() => fileRef.current?.click()}
-                className="w-full flex flex-col items-center gap-2 px-4 py-6 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 hover:border-emerald-300 hover:text-emerald-500 transition-colors"
+                className="w-full flex flex-col items-center gap-2 px-4 py-8 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 hover:border-emerald-300 hover:text-emerald-500 transition-colors"
               >
-                <Upload size={20} />
+                <Upload size={22} />
                 <span className="text-xs">Klik untuk upload file .docx</span>
               </button>
             )}
           </div>
 
-        </div>
-      </div>
-
-      {/* ── Kanan: Pratinjau (sticky — tetap tampil saat form di-scroll) ── */}
-      {/* FIX: sticky top-0 + h-screen agar panel pratinjau tidak ikut scroll */}
-      <div className="w-80 sticky top-0 h-screen overflow-y-auto border-l border-gray-200 bg-white shrink-0">
-        <div className="p-6">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-4">
-            Pratinjau
-          </p>
-          <p className="text-[11px] text-gray-400 mb-4">
-            Update otomatis saat kamu mengetik isi template.
-          </p>
-
-          <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-            {/* Kop surat */}
-            <div className="bg-white px-5 py-4 border-b border-gray-100 flex items-center gap-3">
-              <div className="w-7 h-7 bg-emerald-600 rounded-lg flex items-center justify-center">
-                <FileText size={13} className="text-white" />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-gray-800">PT. ALDM</p>
-                <p className="text-[10px] text-gray-400">Penyuratan Digital</p>
-              </div>
-            </div>
-
-            {/* Isi pratinjau */}
-            <div className="px-5 py-4">
-              <div className="space-y-1 mb-4">
-                <div className="flex gap-2 text-xs">
-                  <span className="text-gray-400 w-14 shrink-0">Nomor</span>
-                  <span className="text-gray-300 font-mono text-[11px]">: {'{{nomor_surat}}'}</span>
-                </div>
-                <div className="flex gap-2 text-xs">
-                  <span className="text-gray-400 w-14 shrink-0">Hal</span>
-                  <span className="text-gray-300 font-mono text-[11px]">
-                    : {variabel.includes('perihal') ? '{{perihal}}' : '—'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Konten template — update real-time */}
-              <div className="text-xs text-gray-400 whitespace-pre-wrap leading-relaxed min-h-[100px] font-mono">
-                {isiTemplate || (
-                  <span className="text-gray-300 italic not-italic font-sans">
-                    Isi template akan muncul di sini saat kamu mengetik...
-                  </span>
-                )}
-              </div>
-
-              {/* Tanda tangan */}
-              <div className="mt-6 text-right">
-                <p className="text-xs text-gray-300">Hormat kami,</p>
-                <div className="mt-5">
-                  <p className="text-xs font-medium text-gray-400">
-                    {variabel.includes('pembuat') ? '{{pembuat}}' : 'Nama Penandatangan'}
-                  </p>
-                  <p className="text-[10px] text-gray-300">Direktur Utama · PT. ALDM</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Ringkasan variabel */}
-          {variabel.length > 0 && (
-            <div className="mt-4 p-3 bg-gray-50 rounded-xl">
-              <p className="text-[11px] font-medium text-gray-500 mb-2">
-                {variabel.length} variabel akan disimpan
+          {/* Variabel yang terdeteksi */}
+          {docxVars.length > 0 && (
+            <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
+              <p className="text-xs font-medium text-emerald-700 mb-2">
+                {docxVars.length} variabel terdeteksi dari file:
               </p>
-              <div className="space-y-1">
-                {variabel.map((v) => (
-                  <div key={v} className="flex items-center gap-2 text-[11px] text-gray-500">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                    <code className="font-mono">{`{{${v}}}`}</code>
-                  </div>
+              <div className="flex flex-wrap gap-1.5">
+                {docxVars.map((v) => (
+                  <span
+                    key={v}
+                    className="text-[11px] bg-white text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-mono"
+                  >
+                    {`{{${v}}}`}
+                  </span>
                 ))}
               </div>
             </div>
           )}
+
+        </div>
+      </div>
+
+      {/* ─── Kanan: Pratinjau ─── */}
+      <div className="w-80 sticky top-0 h-screen overflow-y-auto border-l border-gray-200 bg-white shrink-0">
+        <div className="p-6">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1">
+            Pratinjau
+          </p>
+          <p className="text-[11px] text-gray-400 mb-4">
+            Render langsung dari isi file .docx yang diupload.
+          </p>
+
+          <div className="border border-gray-200 rounded-xl overflow-hidden min-h-[200px]">
+            {reading && (
+              <div className="flex items-center justify-center gap-2 py-16 text-gray-300">
+                <Loader2 size={16} className="animate-spin" />
+                <span className="text-xs">Membaca file...</span>
+              </div>
+            )}
+            {!reading && docxHtml && (
+              <div
+                className="p-4 text-xs text-gray-700 leading-relaxed"
+                style={{ fontSize: '11px', lineHeight: '1.8' }}
+                dangerouslySetInnerHTML={{ __html: docxHtml }}
+              />
+            )}
+            {!reading && !docxHtml && (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-300">
+                <FileText size={28} className="mb-2" />
+                <p className="text-xs italic text-center px-4">
+                  Upload file .docx untuk melihat pratinjau isi dokumen
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

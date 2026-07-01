@@ -10,17 +10,13 @@ class Template extends Model
     use HasFactory;
 
     protected $fillable = [
-        'nama',
-        'jenis_surat',
-        'path_docx',
-        'variabel',
-        'is_active',
-        'created_by',
-    ];
+    'nama', 'jenis_surat', 'path_docx', 'variabel', 'raw_content', 'is_active', 'created_by',
+];
 
     protected $casts = [
         'variabel'  => 'array',   // otomatis encode/decode JSON
         'is_active' => 'boolean',
+        'raw_content' => 'string',
     ];
 
     // =========================================================

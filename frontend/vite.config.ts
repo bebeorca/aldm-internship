@@ -8,12 +8,16 @@ export default defineConfig({
     tsconfigPaths: true,
   },
   server: {
-    host: true,
-    proxy: {
-      '/api': {
-        target: 'http://backend:8000',  // ← nama service Docker
-        changeOrigin: true,
-      },
-    },
+  host: true,
+  proxy: {
+  '/api': {
+    target: 'http://backend:8000',
+    changeOrigin: true,
+  },
+  '/storage': {
+    target: 'http://backend:8000',   // ← untuk fetch file .docx dari browser
+    changeOrigin: true,
+  },
+},
   },
 });

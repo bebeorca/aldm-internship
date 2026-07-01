@@ -1,5 +1,4 @@
 export type Role = 'pembuat' | 'direktur' | 'admin';
-
 export type LetterStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected';
 
 export interface User {
@@ -16,10 +15,11 @@ export interface Template {
   path_docx: string | null;
   jenis_surat: string;
   variabel: string[];
+  raw_content?: string;     // ← teks plain dari docx untuk fallback preview
   is_active: boolean;
   created_by: number | null;
-  created_at?: string;   // ← ditambah
-  updated_at?: string;   // ← ditambah
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Letter {

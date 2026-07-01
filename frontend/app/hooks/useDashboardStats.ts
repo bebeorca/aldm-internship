@@ -27,24 +27,24 @@ export function useDashboardStats(): UseDashboardStatsReturn {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    Promise.all([
-      letterService.getAll(),
-      templateService.getAll(),
-    ])
-      .then(([lettersRes, templatesRes]) => {
-        const letters: Letter[] = lettersRes.data.data;
-        setStats({
-          total:    letters.length,
-          pending:  letters.filter((l) => l.status === 'pending_approval').length,
-          approved: letters.filter((l) => l.status === 'approved').length,
-          rejected: letters.filter((l) => l.status === 'rejected').length,
-        });
-        setRecentLetters(letters.slice(0, 5));
-        setTemplates(templatesRes.data.data);
-      })
-      .catch(() => setError('Gagal memuat data dashboard.'))
-      .finally(() => setLoading(false));
-  }, []);
+  templateService.getAll()
+    .then((templatesRes) => {
+      // sementara letters kosong
+      const letters: Letter[] = [];
+
+      setStats({
+        total: 0,
+        pending: 0,
+        approved: 0,
+        rejected: 0,
+      });
+
+      setRecentLetters([]);
+      setTemplates(templatesRes.data.data);
+    })
+    .catch(() => setError('Gagal memuat data dashboard.'))
+    .finally(() => setLoading(false));
+}, []);
 
   return { stats, recentLetters, templates, loading, error };
 }
