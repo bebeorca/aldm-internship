@@ -94,10 +94,18 @@ class TemplateController extends Controller
             return [[], ''];
         }
 
+        // Replace common DOCX inline tags with newlines so text remains readable
+        $xml = preg_replace('/<w:(?:br|cr|tab)[^>]*\/?>/i', "\n", $xml);
+
         // Gabung semua teks di dalam tag <w:t>
         preg_match_all('/<w:t[^>]*>(.*?)<\/w:t>/s', $xml, $matches);
-        $rawContent = html_entity_decode(implode('', $matches[1]), ENT_QUOTES | ENT_XML1);
+        $rawContent = implode('', $matches[1]);
+
+        // Hilangkan tag XML yang masih tersisa, lalu decode entity dan rapihkan spasi
+        $rawContent = preg_replace('/<[^>]+>/', ' ', $rawContent);
+        $rawContent = html_entity_decode($rawContent, ENT_QUOTES | ENT_XML1);
         $rawContent = preg_replace('/[ \t]+/', ' ', $rawContent);
+        $rawContent = preg_replace('/(?:\r?\n\s*)+/', "\n", $rawContent);
         $rawContent = trim($rawContent);
 
         // Extract {{nama_variabel}} dari raw text

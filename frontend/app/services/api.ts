@@ -30,10 +30,7 @@ api.interceptors.response.use(
 export const templateService = {
   getAll:   ()             => api.get('/templates'),
   getById:  (id: number)   => api.get(`/templates/${id}`),
-  create:   (data: FormData) =>
-    api.post('/templates', data, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+  create:   (data: FormData) => api.post('/templates', data),
 };
 
 export const letterService = {
@@ -47,9 +44,7 @@ export const letterService = {
   syncCsv:   (file: File) => {
     const form = new FormData();
     form.append('file', file);
-    return api.post('/sync/csv', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    return api.post('/sync/csv', form);
   },
 };
 

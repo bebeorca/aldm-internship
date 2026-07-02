@@ -4,7 +4,7 @@ import {
   ChevronLeft, Loader2, FileText, Upload, Tag,
   CheckCircle2, AlertCircle, Check, Bold, Italic, Underline, List,
 } from 'lucide-react';
-import mammoth from 'mammoth';
+import mammoth from 'mammoth/mammoth.browser.js';
 import { letterService, templateService } from '../../services/api';
 import type { Template } from '../../types';
 import Base from '~/components/ui/Base';
@@ -38,6 +38,23 @@ function parseCsv(text: string): Record<string, string> {
   const result: Record<string, string> = {};
   headers.forEach((h, i) => { result[h] = values[i] ?? ''; });
   return result;
+}
+
+function sanitizeRawContent(raw: string): string {
+  const decoded = raw
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&');
+
+  return decoded
+    .replace(/<w:(?:br|cr|tab)[^>]*\/?>/gi, '\n')
+    .replace(/<\/w:[^>]+>/gi, ' ')
+    .replace(/<w:[^>]+>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[ \t\r]+/g, ' ')
+    .replace(/\n+/g, '\n')
+    .trim();
 }
 
 function formatLabel(key: string): string {
@@ -120,7 +137,8 @@ export default function MouTwoPage() {
     if (!selected?.path_docx || selected.path_docx === 'templates/placeholder.docx') {
       // Fallback: gunakan raw_content dari DB jika ada
       if (selected?.raw_content) {
-        const escapedHtml = selected.raw_content
+        const cleaned = sanitizeRawContent(selected.raw_content);
+        const escapedHtml = cleaned
           .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         setBaseHtml(`<p>${escapedHtml.replace(/\n/g, '</p><p>')}</p>`);
       }
@@ -140,7 +158,8 @@ export default function MouTwoPage() {
       .catch(() => {
         // Fallback ke raw_content dari DB
         if (selected.raw_content) {
-          const esc = selected.raw_content
+          const cleaned = sanitizeRawContent(selected.raw_content);
+          const esc = cleaned
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
           setBaseHtml(`<p>${esc.replace(/\n/g, '</p><p>')}</p>`);
         } else {

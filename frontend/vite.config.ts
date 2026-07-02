@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [tailwindcss(), reactRouter()],
   resolve: {
     tsconfigPaths: true,
+    alias: [{ find: /^mammoth$/, replacement: 'mammoth/mammoth.browser.js' }],
   },
   server: {
   host: true,

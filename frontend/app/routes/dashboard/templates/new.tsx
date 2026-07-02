@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { Upload, X, FileText, ChevronLeft, Loader2 } from 'lucide-react';
-import mammoth from 'mammoth';
+import mammoth from 'mammoth/mammoth.browser.js';
 import { templateService } from '../../../services/api';
 
 const JENIS_OPTIONS = ['BAA', 'SPK', 'MOU', 'KONTRAK'];
@@ -39,7 +39,7 @@ export default function NewTemplatePage() {
       // Extract teks bersih untuk deteksi variabel
       const textResult = await mammoth.extractRawText({ arrayBuffer });
       const matches = textResult.value.match(/\{\{(\w+)\}\}/g) ?? [];
-      const vars = [...new Set(matches.map(m => m.replace(/\{\{|\}\}/g, '')))];
+      const vars = Array.from(new Set(matches.map((m: string) => m.replace(/\{\{|\}\}/g, ''))));
       setDocxVars(vars);
     } catch {
       setError('Gagal membaca file DOCX. Pastikan file tidak corrupt.');
