@@ -1,0 +1,556 @@
+openapi: 3.0.3
+
+info:
+  title: Sistem Penyuratan Digital PT. ALDM
+  description: API untuk sistem digitalisasi penyuratan otomatis PT. ALDM
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000/api
+    description: Local Development
+
+tags:
+  - name: Auth
+  - name: User
+  - name: Templates
+  - name: Letters
+  - name: Sync
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        nama:
+          type: string
+          example: Direktur
+        email:
+          type: string
+          example: direktur@aldm.co.id
+        role:
+          type: string
+          enum: [pembuat, direktur, admin]
+          example: direktur
+
+    Template:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        nama:
+          type: string
+          example: Memorandum of Understanding (MoU)
+        jenis_surat:
+          type: string
+          example: MOU
+        variabel:
+          type: array
+          items:
+            type: string
+          example: [nama_penerima, jabatan_penerima, perusahaan_penerima, perihal, tanggal, tempat]
+        is_active:
+          type: boolean
+          example: true
+
+    Letter:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        nomor_surat:
+          type: string
+          example: 001/MOU/VII/2026
+        status:
+          type: string
+          enum: [draft, pending_approval, approved, rejected]
+          example: pending_approval
+        data_surat:
+          type: object
+          additionalProperties:
+            type: string
+          example:
+            nama_penerima: PT. ABC
+            jabatan_penerima: Direktur
+            perusahaan_penerima: PT. ABC Indonesia
+            perihal: Kerja Sama
+            tanggal: 1 Juli 2026
+            tempat: Surabaya
+        path_docx:
+          type: string
+          example: letters/draft/letter_xxx.docx
+        path_pdf:
+          type: string
+          nullable: true
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          example: 2026-07-01 04:49:45
+        updated_at:
+          type: string
+          format: date-time
+          example: 2026-07-01 04:49:45
+        template:
+          $ref: '#/components/schemas/TemplateShort'
+        creator:
+          $ref: '#/components/schemas/UserShort'
+        latest_approval:
+          $ref: '#/components/schemas/ApprovalShort'
+          nullable: true
+
+    TemplateShort:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        nama:
+          type: string
+          example: Memorandum of Understanding (MoU)
+        jenis_surat:
+          type: string
+          example: MOU
+
+    UserShort:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2
+        nama:
+          type: string
+          example: Pembuat Surat
+        role:
+          type: string
+          example: pembuat
+
+    ApprovalShort:
+      type: object
+      nullable: true
+      properties:
+        status:
+          type: string
+          enum: [approved, rejected]
+          example: approved
+        catatan:
+          type: string
+          nullable: true
+          example: null
+        reviewed_at:
+          type: string
+          format: date-time
+          example: 2026-07-01 05:00:00
+        reviewer:
+          type: object
+          properties:
+            nama:
+              type: string
+              example: Direktur
+
+    SignatureData:
+      type: object
+      properties:
+        signature_path:
+          type: string
+          example: signatures/abc123.png
+        signature_url:
+          type: string
+          example: http://localhost:8000/storage/signatures/abc123.png
+
+    SyncRow:
+      type: object
+      properties:
+        no:
+          type: string
+          example: "1"
+        nama:
+          type: string
+          example: Budi Santoso
+        tempat_lahir:
+          type: string
+          example: Surabaya
+        tanggal_lahir:
+          type: string
+          example: 1995-03-12
+        jenis_kelamin:
+          type: string
+          example: Laki-laki
+        no_hp:
+          type: string
+          example: "08123456789"
+        alamat:
+          type: string
+          example: Jl. Raya No. 1
+        posisi:
+          type: string
+          example: Staff
+        gaji:
+          type: string
+          example: "5000000"
+        gaji_terbilang:
+          type: string
+          example: Lima Juta Rupiah
+        tgl_mulai_training:
+          type: string
+          example: 2026-07-01
+        tgl_selesai_training:
+          type: string
+          example: 2026-07-31
+        tgl_ttd:
+          type: string
+          example: 2026-07-01
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: Pesan error
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: The field is required.
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            email: [Email wajib diisi]
+            password: [Password wajib diisi]
+
+security:
+  - bearerAuth: []
+
+paths:
+
+  # ─── AUTH ────────────────────────────────────────────────────────────────────
+
+  /login:
+    post:
+      tags: [Auth]
+      summary: Login dan dapatkan token akses
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: pembuat@aldm.co.id
+                password:
+                  type: string
+                  example: password
+      responses:
+        '200':
+          description: Login berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+                  token:
+                    type: string
+                    example: 1|abcdef123456...
+        '401':
+          description: Email atau password salah
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Email atau password salah
+
+  # ─── USER ────────────────────────────────────────────────────────────────────
+
+  /user:
+    get:
+      tags: [User]
+      summary: Ambil data user yang sedang login
+      responses:
+        '200':
+          description: Data user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthenticated
+
+  /user/signature:
+    post:
+      tags: [User]
+      summary: Upload foto tanda tangan direktur
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [signature]
+              properties:
+                signature:
+                  type: string
+                  format: binary
+                  description: File PNG/JPG/JPEG, max 2MB
+      responses:
+        '200':
+          description: Tanda tangan berhasil disimpan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Tanda tangan berhasil disimpan.
+                  data:
+                    $ref: '#/components/schemas/SignatureData'
+        '422':
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+
+    get:
+      tags: [User]
+      summary: Ambil info tanda tangan yang sudah diupload
+      responses:
+        '200':
+          description: Info tanda tangan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/SignatureData'
+                    nullable: true
+
+  # ─── TEMPLATES ───────────────────────────────────────────────────────────────
+
+  /templates:
+    get:
+      tags: [Templates]
+      summary: Ambil semua template surat yang aktif
+      responses:
+        '200':
+          description: Daftar template
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Template'
+
+  # ─── LETTERS ─────────────────────────────────────────────────────────────────
+
+  /letters:
+    get:
+      tags: [Letters]
+      summary: Ambil daftar surat
+      description: |
+        - **pembuat** — hanya melihat surat milik sendiri
+        - **direktur/admin** — melihat semua surat
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [draft, pending_approval, approved, rejected]
+          required: false
+          description: Filter surat berdasarkan status
+      responses:
+        '200':
+          description: Daftar surat dengan pagination
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Letter'
+                  links:
+                    type: object
+                  meta:
+                    type: object
+
+    post:
+      tags: [Letters]
+      summary: Buat surat baru dan kirim ke approval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [template_id, data_surat]
+              properties:
+                template_id:
+                  type: integer
+                  example: 1
+                data_surat:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  example:
+                    nama_penerima: PT. ABC
+                    jabatan_penerima: Direktur
+                    perusahaan_penerima: PT. ABC Indonesia
+                    perihal: Kerja Sama
+                    tanggal: 1 Juli 2026
+                    tempat: Surabaya
+      responses:
+        '201':
+          description: Surat berhasil dibuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Surat berhasil dikirim untuk approval.
+                  data:
+                    $ref: '#/components/schemas/Letter'
+        '422':
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Gagal generate DOCX
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /letters/{id}:
+    get:
+      tags: [Letters]
+      summary: Ambil detail satu surat
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          example: 1
+      responses:
+        '200':
+          description: Detail surat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Letter'
+        '403':
+          description: Tidak punya akses ke surat ini
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Anda tidak memiliki akses ke surat ini.
+        '404':
+          description: Surat tidak ditemukan
+
+  # ─── SYNC ────────────────────────────────────────────────────────────────────
+
+  /sync/csv:
+    post:
+      tags: [Sync]
+      summary: Import data peserta training dari file CSV
+      description: |
+        Format kolom CSV yang dibutuhkan:
+        `NO, NAMA, TEMPAT_LAHIR, TANGGAL_LAHIR, JENIS_KELAMIN, NO_HP, ALAMAT, POSISI, GAJI, GAJI_TERBILANG, TGL_MULAI_TRAINING, TGL_SELESAI_TRAINING, TGL_TTD`
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File CSV, max 5MB
+      responses:
+        '200':
+          description: CSV berhasil dibaca
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Berhasil membaca 10 data dari CSV.
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SyncRow'
+                  meta:
+                    type: object
+                    properties:
+                      jumlah:
+                        type: integer
+                        example: 10
+                      log_id:
+                        type: integer
+                        example: 1
+        '422':
+          description: Format CSV tidak valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
