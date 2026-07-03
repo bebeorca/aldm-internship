@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '/api',   // relative → goes through Vite proxy, tidak bypass ke localhost:8000 langsung
+  baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -14,23 +14,22 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    // Jangan redirect ke login untuk /sync — endpoint itu auth:sanctum di backend
-    // tapi CSV sekarang diparse di frontend tanpa API call, so ini sebagai safety net
     const url = err.config?.url ?? '';
     const isSyncRequest = url.includes('/sync');
 
-    if (err.response?.status === 401 && !isSyncRequest) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+    if (err.response?.status === 401 && !isSyncRequest) 
+    {
+    //   localStorage.removeItem('token');
+    //   window.location.href = '/login';
     }
     return Promise.reject(err);
   }
 );
 
 export const templateService = {
-  getAll:   ()             => api.get('/templates'),
-  getById:  (id: number)   => api.get(`/templates/${id}`),
-  create:   (data: FormData) =>
+  getAll:  ()             => api.get('/templates'),
+  getById: (id: number)   => api.get(`/templates/${id}`),
+  create:  (data: FormData) =>
     api.post('/templates', data, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
@@ -48,6 +47,18 @@ export const letterService = {
     const form = new FormData();
     form.append('file', file);
     return api.post('/sync/csv', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+};
+
+// ─── User / Signature ─── (GET & POST /api/user/signature, behind auth:sanctum)
+export const userService = {
+  getSignature: () => api.get('/user/signature'),
+  uploadSignature: (file: File) => {
+    const form = new FormData();
+    form.append('signature', file);
+    return api.post('/user/signature', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },

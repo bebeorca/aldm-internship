@@ -16,10 +16,18 @@ class UserController extends Controller
 
     /**
      * POST /api/user/signature
-     * Upload dan simpan foto tanda tangan direktur
+     * Hanya Direktur yang boleh upload tanda tangan
      */
     public function uploadSignature(UploadSignatureRequest $request): JsonResponse
     {
+        // Role check — hanya direktur
+        if (auth()->user()?->role !== 'direktur') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Hanya Direktur yang dapat mengelola tanda tangan.',
+            ], 403);
+        }
+
         try {
             $user = auth()->user();
             $path = $this->signatureService->upload($user, $request->file('signature'));
@@ -29,7 +37,7 @@ class UserController extends Controller
                 'message' => 'Tanda tangan berhasil disimpan.',
                 'data' => [
                     'signature_path' => $path,
-                    'signature_url' => Storage::disk('public')->url($path),
+                    'signature_url'  => Storage::disk('public')->url($path),
                 ],
             ]);
 
@@ -48,17 +56,25 @@ class UserController extends Controller
 
     /**
      * GET /api/user/signature
-     * Ambil info tanda tangan user yang sedang login
+     * Hanya Direktur yang boleh lihat tanda tangannya sendiri
      */
     public function getSignature(): JsonResponse
     {
+        // Role check — hanya direktur
+        if (auth()->user()?->role !== 'direktur') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak.',
+            ], 403);
+        }
+
         $user = auth()->user();
 
         if (!$user->hasSignature()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Tanda tangan belum diupload.',
-                'data' => null,
+                'data'    => null,
             ]);
         }
 
@@ -66,7 +82,7 @@ class UserController extends Controller
             'success' => true,
             'data' => [
                 'signature_path' => $user->signature_path,
-                'signature_url' => Storage::disk('public')->url($user->signature_path),
+                'signature_url'  => Storage::disk('public')->url($user->signature_path),
             ],
         ]);
     }

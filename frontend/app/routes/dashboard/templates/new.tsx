@@ -1,47 +1,61 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Upload, X, FileText, ChevronLeft, Loader2 } from 'lucide-react';
-import mammoth from 'mammoth';
+import { renderAsync } from 'docx-preview';
 import { templateService } from '../../../services/api';
 
 const JENIS_OPTIONS = ['BAA', 'SPK', 'MOU', 'KONTRAK'];
 
 export default function NewTemplatePage() {
   const navigate = useNavigate();
-  const fileRef  = useRef<HTMLInputElement>(null);
+  const fileRef    = useRef<HTMLInputElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
 
-  const [nama, setNama]           = useState('');
+  const [nama, setNama]             = useState('');
   const [jenisSurat, setJenisSurat] = useState('');
-  const [file, setFile]           = useState<File | null>(null);
-  const [docxHtml, setDocxHtml]   = useState('');
-  const [docxVars, setDocxVars]   = useState<string[]>([]);
-  const [reading, setReading]     = useState(false);
+  const [file, setFile]             = useState<File | null>(null);
+  const [docxVars, setDocxVars]     = useState<string[]>([]);
+  const [reading, setReading]       = useState(false);
+  const [hasPreview, setHasPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError]         = useState('');
+  const [error, setError]           = useState('');
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
 
     setFile(f);
-    setDocxHtml('');
     setDocxVars([]);
+    setHasPreview(false);
     setReading(true);
     setError('');
 
     try {
       const arrayBuffer = await f.arrayBuffer();
 
-      // Render HTML untuk pratinjau
-      const htmlResult = await mammoth.convertToHtml({ arrayBuffer });
-      setDocxHtml(htmlResult.value);
+      // Render dengan docx-preview — preserve layout Word asli termasuk header/logo/table
+      if (previewRef.current) {
+        previewRef.current.innerHTML = '';
+        await renderAsync(arrayBuffer, previewRef.current, undefined, {
+          inWrapper: false,
+          ignoreWidth: true,
+          ignoreHeight: true,
+          renderHeaders: true,
+          renderFooters: true,
+          renderFootnotes: true,
+          breakPages: false,
+          ignoreFonts: false,
+        });
+        setHasPreview(true);
 
-      // Extract teks bersih untuk deteksi variabel
-      const textResult = await mammoth.extractRawText({ arrayBuffer });
-      const matches = textResult.value.match(/\{\{(\w+)\}\}/g) ?? [];
-      const vars = [...new Set(matches.map(m => m.replace(/\{\{|\}\}/g, '')))];
-      setDocxVars(vars);
-    } catch {
+        // Extract variabel dari text content yang sudah dirender — lebih akurat dari mammoth
+        const renderedText = previewRef.current.textContent || '';
+        const matches = renderedText.match(/\{\{(\w+)\}\}/g) ?? [];
+        const vars = [...new Set(matches.map((m) => m.replace(/\{\{|\}\}/g, '')))];
+        setDocxVars(vars);
+      }
+    } catch (err) {
+      console.error('docx-preview error:', err);
       setError('Gagal membaca file DOCX. Pastikan file tidak corrupt.');
       setFile(null);
       if (fileRef.current) fileRef.current.value = '';
@@ -52,8 +66,9 @@ export default function NewTemplatePage() {
 
   const handleRemoveFile = () => {
     setFile(null);
-    setDocxHtml('');
     setDocxVars([]);
+    setHasPreview(false);
+    if (previewRef.current) previewRef.current.innerHTML = '';
     if (fileRef.current) fileRef.current.value = '';
   };
 
@@ -122,11 +137,8 @@ export default function NewTemplatePage() {
 
         <div className="max-w-lg space-y-5">
 
-          {/* Nama Template */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Nama Template
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Nama Template</label>
             <input
               type="text"
               value={nama}
@@ -136,11 +148,8 @@ export default function NewTemplatePage() {
             />
           </div>
 
-          {/* Kategori */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Kategori
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Kategori</label>
             <select
               value={jenisSurat}
               onChange={(e) => setJenisSurat(e.target.value)}
@@ -151,30 +160,22 @@ export default function NewTemplatePage() {
             </select>
           </div>
 
-          {/* Upload DOCX — WAJIB */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Upload File DOCX <span className="text-red-500">*</span>
             </label>
             <p className="text-xs text-gray-400 mb-2">
-              Variabel di dalam file menggunakan format{' '}
-              <code className="bg-gray-100 px-1 rounded font-mono text-[11px]">{'{{nama_variabel}}'}</code>.
-              Frontend akan membaca dan mendeteksi variabel otomatis.
+              Gunakan{' '}
+              <code className="bg-gray-100 px-1 rounded font-mono text-[11px]">{'{{nama_variabel}}'}</code>
+              {' '}sebagai placeholder di dalam file Word.
             </p>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".docx"
-              onChange={handleFileChange}
-              className="hidden"
-            />
+            <input ref={fileRef} type="file" accept=".docx" onChange={handleFileChange} className="hidden" />
             {file ? (
               <div className="flex items-center gap-3 px-4 py-3 border border-emerald-200 bg-emerald-50 rounded-xl">
-                {reading ? (
-                  <Loader2 size={16} className="text-emerald-500 animate-spin shrink-0" />
-                ) : (
-                  <FileText size={16} className="text-emerald-600 shrink-0" />
-                )}
+                {reading
+                  ? <Loader2 size={16} className="text-emerald-500 animate-spin shrink-0" />
+                  : <FileText size={16} className="text-emerald-600 shrink-0" />
+                }
                 <span className="text-sm text-emerald-700 flex-1 truncate">{file.name}</span>
                 <button onClick={handleRemoveFile}>
                   <X size={14} className="text-emerald-500 hover:text-emerald-700" />
@@ -191,7 +192,6 @@ export default function NewTemplatePage() {
             )}
           </div>
 
-          {/* Variabel yang terdeteksi */}
           {docxVars.length > 0 && (
             <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
               <p className="text-xs font-medium text-emerald-700 mb-2">
@@ -199,10 +199,7 @@ export default function NewTemplatePage() {
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {docxVars.map((v) => (
-                  <span
-                    key={v}
-                    className="text-[11px] bg-white text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-mono"
-                  >
+                  <span key={v} className="text-[11px] bg-white text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-mono">
                     {`{{${v}}}`}
                   </span>
                 ))}
@@ -214,34 +211,33 @@ export default function NewTemplatePage() {
       </div>
 
       {/* ─── Kanan: Pratinjau ─── */}
-      <div className="w-80 sticky top-0 h-screen overflow-y-auto border-l border-gray-200 bg-white shrink-0">
+      <div className="w-96 sticky top-0 h-screen overflow-y-auto border-l border-gray-200 bg-white shrink-0">
         <div className="p-6">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1">
-            Pratinjau
-          </p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1">Pratinjau</p>
           <p className="text-[11px] text-gray-400 mb-4">
-            Render langsung dari isi file .docx yang diupload.
+            Render layout asli Word — header, logo, tabel, dan spacing dipertahankan.
           </p>
 
-          <div className="border border-gray-200 rounded-xl overflow-hidden min-h-[200px]">
+          <div className="border border-gray-200 rounded-xl overflow-hidden min-h-[200px] relative">
             {reading && (
-              <div className="flex items-center justify-center gap-2 py-16 text-gray-300">
+              <div className="absolute inset-0 bg-white flex items-center justify-center gap-2 text-gray-300 z-10">
                 <Loader2 size={16} className="animate-spin" />
-                <span className="text-xs">Membaca file...</span>
+                <span className="text-xs">Memuat pratinjau...</span>
               </div>
             )}
-            {!reading && docxHtml && (
-              <div
-                className="p-4 text-xs text-gray-700 leading-relaxed"
-                style={{ fontSize: '11px', lineHeight: '1.8' }}
-                dangerouslySetInnerHTML={{ __html: docxHtml }}
-              />
-            )}
-            {!reading && !docxHtml && (
+
+            {/* Container untuk docx-preview — selalu ada di DOM agar ref valid */}
+            <div
+              ref={previewRef}
+              className="docx-preview-container p-2"
+              style={{ display: hasPreview ? 'block' : 'none', fontSize: '10px' }}
+            />
+
+            {!reading && !hasPreview && (
               <div className="flex flex-col items-center justify-center py-16 text-gray-300">
                 <FileText size={28} className="mb-2" />
                 <p className="text-xs italic text-center px-4">
-                  Upload file .docx untuk melihat pratinjau isi dokumen
+                  Upload file .docx untuk melihat pratinjau
                 </p>
               </div>
             )}

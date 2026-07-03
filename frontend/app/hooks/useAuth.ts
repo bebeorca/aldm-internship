@@ -12,8 +12,15 @@ export function useAuth(): UseAuthReturn {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get('/auth/me')
-      .then((res) => setUser(res.data.data))
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
+    // Route yang benar di backend adalah GET /api/user (bukan /auth/me)
+    api.get('/user')
+      .then((res) => setUser(res.data ?? null))
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);

@@ -5,15 +5,15 @@ namespace App\Services\Letter;
 use App\DTO\StoreLetterDTO;
 use App\Models\Letter;
 use App\Models\Template;
-use App\Services\NomorSuratService;
+use App\Services\Letter\NomorSuratService;   // ← fixed namespace
 use Illuminate\Support\Facades\DB;
 
 class StoreLetterService
 {
     public function __construct(
-        private readonly NomorSuratService     $nomorSuratService,
-        private readonly LetterValidatorService $validator,
-        private readonly DocxGeneratorService  $docxGenerator,
+        private readonly NomorSuratService      $nomorSuratService,
+        private readonly LetterValidatorService  $validator,
+        private readonly DocxGeneratorService   $docxGenerator,
     ) {}
 
     /**

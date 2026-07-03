@@ -3,18 +3,24 @@ import {
   route,
   index,
   layout,
-  prefix,
 } from "@react-router/dev/routes";
 
 export default [
+  // Auth routes — tanpa sidebar layout
+  layout("routes/_auth/layout.tsx", [
+    route("login", "routes/_auth/login.tsx"),
+  ]),
+
+  // App routes — dengan sidebar layout
   layout("routes/_layout.tsx", [
     index("routes/home/index.tsx"),
     route("dashboard", "routes/dashboard/index.tsx"),
-    route("dashboard/templates", "routes/dashboard/templates/index.tsx"),      // ← ditambah
-    route("dashboard/templates/new", "routes/dashboard/templates/new.tsx"),    // ← ditambah
+    route("dashboard/templates", "routes/dashboard/templates/index.tsx"),
+    route("dashboard/templates/new", "routes/dashboard/templates/new.tsx"),
     route("letters", "routes/letters/index.tsx"),
     route("letters/create/mou", "routes/letters/mou.tsx"),
-    route("letters/create/mou2", "routes/letters/mou2.tsx"),   // ← ditambah
+    route("letters/create/mou2", "routes/letters/mou2.tsx"),
     route("approval", "routes/approval/index.tsx"),
+    route("settings/signature", "routes/dashboard/signature.tsx"),
   ]),
 ] satisfies RouteConfig;
