@@ -275,4 +275,4 @@
         <?php endif; ?>
     </body>
 </html>
-<?php /**PATH /app/resources/views/welcome.blade.php ENDPATH**/ ?>
+<?php /**PATH C:\Users\Thoni\OneDrive\Documents\ALDM\aldm-internship\backend\resources\views/welcome.blade.php ENDPATH**/ ?>

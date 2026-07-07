@@ -2,6 +2,9 @@
 
 namespace App\DTO;
 
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+
 class StoreLetterDTO
 {
     public function __construct(
@@ -11,11 +14,17 @@ class StoreLetterDTO
     ) {
     }
 
-    public static function fromRequest(\Illuminate\Http\Request $request): self
+    public static function fromRequest(Request $request): self
     {
+        $createdBy = Auth::id();
+
+        if (!$createdBy) {
+            throw new \InvalidArgumentException('Pengguna belum login. Silakan masuk kembali.');
+        }
+
         return new self(
             templateId: (int) $request->input('template_id'),
-            createdBy: (int) (auth()->id() ?? 1), // ← fallback ke user id 1 sementara
+            createdBy: $createdBy,
             dataSurat: $request->input('data_surat', []),
         );
     }

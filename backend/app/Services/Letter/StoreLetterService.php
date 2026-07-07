@@ -5,7 +5,7 @@ namespace App\Services\Letter;
 use App\DTO\StoreLetterDTO;
 use App\Models\Letter;
 use App\Models\Template;
-use App\Services\NomorSuratService;
+use App\Services\Letter\NomorSuratService;
 use Illuminate\Support\Facades\DB;
 
 class StoreLetterService

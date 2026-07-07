@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\Letter;
 
 use App\Models\NomorSuratCounter;
 use Illuminate\Support\Facades\DB;

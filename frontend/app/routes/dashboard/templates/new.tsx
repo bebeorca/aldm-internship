@@ -1,10 +1,35 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { Upload, X, FileText, ChevronLeft, Loader2 } from 'lucide-react';
-import mammoth from 'mammoth';
+import mammoth from 'mammoth/mammoth.browser.js';
 import { templateService } from '../../../services/api';
 
 const JENIS_OPTIONS = ['BAA', 'SPK', 'MOU', 'KONTRAK'];
+
+/**
+ * Validasi apakah konten tampak mengandung XML tags yang tidak terproses
+ */
+function hasUnprocessedXmlTags(html: string): boolean {
+  return /<w:|<\/w:|<xml|xmlns|<\?xml/i.test(html);
+}
+
+/**
+ * Sanitasi HTML/XML untuk menghilangkan tag Word XML yang tertinggal
+ */
+function sanitizeXmlTags(text: string): string {
+  // Hapus semua XML/HTML tags
+  let cleaned = text.replace(/<[^>]+>/g, '');
+  
+  // Decode HTML entities
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = cleaned;
+  cleaned = textarea.value;
+  
+  // Hapus extra whitespace
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  
+  return cleaned;
+}
 
 export default function NewTemplatePage() {
   const navigate = useNavigate();
@@ -34,12 +59,23 @@ export default function NewTemplatePage() {
 
       // Render HTML untuk pratinjau
       const htmlResult = await mammoth.convertToHtml({ arrayBuffer });
-      setDocxHtml(htmlResult.value);
+      let html = htmlResult.value;
+      
+      // Validasi bahwa konversi berhasil
+      if (hasUnprocessedXmlTags(html)) {
+        console.warn('DOCX conversion resulted in XML tags, sanitizing...');
+        // Coba gunakan raw text sebagai fallback
+        const textResult = await mammoth.extractRawText({ arrayBuffer });
+        html = `<p>${textResult.value.replace(/\n/g, '</p><p>')}</p>`;
+      }
+      
+      setDocxHtml(html);
 
       // Extract teks bersih untuk deteksi variabel
       const textResult = await mammoth.extractRawText({ arrayBuffer });
-      const matches = textResult.value.match(/\{\{(\w+)\}\}/g) ?? [];
-      const vars = [...new Set(matches.map(m => m.replace(/\{\{|\}\}/g, '')))];
+      const text = textResult.value;
+      const matches = text.match(/\{\{(\w+)\}\}/g) ?? [];
+      const vars = Array.from(new Set(matches.map((m: string) => m.replace(/\{\{|\}\}/g, ''))));
       setDocxVars(vars);
     } catch {
       setError('Gagal membaca file DOCX. Pastikan file tidak corrupt.');

@@ -44,6 +44,32 @@ function formatLabel(key: string): string {
   return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/**
+ * Sanitasi HTML/XML untuk menghilangkan tag Word XML yang tertinggal
+ * Gunakan untuk membersihkan raw_content yang mungkin masih mengandung XML tags
+ */
+function sanitizeXmlTags(text: string): string {
+  // Hapus semua XML/HTML tags
+  let cleaned = text.replace(/<[^>]+>/g, '');
+  
+  // Decode HTML entities
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = cleaned;
+  cleaned = textarea.value;
+  
+  // Hapus extra whitespace
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  
+  return cleaned;
+}
+
+/**
+ * Validasi apakah konten tampak mengandung XML tags yang tidak terproses
+ */
+function hasUnprocessedXmlTags(html: string): boolean {
+  return /<w:|<\/w:|<xml|xmlns|<\?xml/i.test(html);
+}
+
 export default function MouTwoPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -91,8 +117,9 @@ export default function MouTwoPage() {
         data_surat: formData,
       });
       navigate('/letters'); // redirect ke arsip setelah berhasil
-    } catch {
-      setSubmitError('Gagal mengirim surat. Coba lagi.');
+    } catch (err: any) {
+      const serverMessage = err?.response?.data?.message;
+      setSubmitError(serverMessage || 'Gagal mengirim surat. Coba lagi.');
     } finally {
       setSubmitting(false);
     }
@@ -120,7 +147,12 @@ export default function MouTwoPage() {
     if (!selected?.path_docx || selected.path_docx === 'templates/placeholder.docx') {
       // Fallback: gunakan raw_content dari DB jika ada
       if (selected?.raw_content) {
-        const escapedHtml = selected.raw_content
+        // Sanitasi raw_content untuk menghilangkan XML tags yang mungkin tertinggal
+        let content = selected.raw_content;
+        if (hasUnprocessedXmlTags(content)) {
+          content = sanitizeXmlTags(content);
+        }
+        const escapedHtml = content
           .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         setBaseHtml(`<p>${escapedHtml.replace(/\n/g, '</p><p>')}</p>`);
       }
@@ -136,11 +168,30 @@ export default function MouTwoPage() {
         return r.arrayBuffer();
       })
       .then((buf) => mammoth.convertToHtml({ arrayBuffer: buf }))
-      .then((result) => setBaseHtml(result.value))
-      .catch(() => {
+      .then((result) => {
+        // Validasi bahwa Mammoth berhasil mengkonversi (bukan XML mentah)
+        let html = result.value;
+        
+        if (hasUnprocessedXmlTags(html)) {
+          // Jika masih ada XML tags, gunakan fallback
+          throw new Error('Mammoth conversion resulted in XML tags');
+        }
+        
+        setBaseHtml(html);
+      })
+      .catch((err) => {
+        console.warn('DOCX conversion failed, using fallback:', err);
+        
         // Fallback ke raw_content dari DB
         if (selected.raw_content) {
-          const esc = selected.raw_content
+          let content = selected.raw_content;
+          
+          // Jika raw_content masih mengandung XML, sanitasi
+          if (hasUnprocessedXmlTags(content)) {
+            content = sanitizeXmlTags(content);
+          }
+          
+          const esc = content
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
           setBaseHtml(`<p>${esc.replace(/\n/g, '</p><p>')}</p>`);
         } else {

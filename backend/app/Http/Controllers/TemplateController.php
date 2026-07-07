@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Template;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\Storage;
 use ZipArchive;
 
@@ -15,9 +16,9 @@ class TemplateController extends Controller
      */
     public function index(): JsonResponse
     {
-        $templates = Template::orderBy('created_at', 'desc')->get();
+        $templates = Template::query()->orderBy('created_at', 'desc')->get();
 
-        return response()->json([
+        return Response::json([
             'success' => true,
             'data'    => $templates,
         ]);
@@ -28,7 +29,7 @@ class TemplateController extends Controller
      */
     public function show(Template $template): JsonResponse
     {
-        return response()->json([
+        return Response::json([
             'success' => true,
             'data'    => $template,
         ]);
@@ -65,7 +66,7 @@ class TemplateController extends Controller
             'created_by'  => $request->input('created_by'),
         ]);
 
-        return response()->json([
+        return Response::json([
             'success' => true,
             'message' => count($variabel) . ' variabel terdeteksi dari file .docx.',
             'data'    => $template,
@@ -97,7 +98,14 @@ class TemplateController extends Controller
         // Gabung semua teks di dalam tag <w:t>
         preg_match_all('/<w:t[^>]*>(.*?)<\/w:t>/s', $xml, $matches);
         $rawContent = html_entity_decode(implode('', $matches[1]), ENT_QUOTES | ENT_XML1);
+        
+        // Cleanup: hapus Word-specific XML tags yang mungkin tertinggal
+        $rawContent = preg_replace('/<w:[^>]*>/i', '', $rawContent);
+        $rawContent = preg_replace('/<\/w:[^>]*>/i', '', $rawContent);
+        
+        // Bersihkan whitespace berlebih
         $rawContent = preg_replace('/[ \t]+/', ' ', $rawContent);
+        $rawContent = preg_replace('/\n\s*\n/', "\n", $rawContent); // Bersihkan baris kosong
         $rawContent = trim($rawContent);
 
         // Extract {{nama_variabel}} dari raw text

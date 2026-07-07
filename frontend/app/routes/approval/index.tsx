@@ -1,11 +1,59 @@
 // src/routes/approval/index.tsx
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { CheckCircle, XCircle, Clock, Loader2, FileText, ChevronRight } from 'lucide-react';
+import {
+  CheckCircle,
+  Eye,
+  XCircle,
+  Clock,
+  Loader2,
+  FileText,
+  ChevronRight,
+} from 'lucide-react';
 import { letterService } from '../../services/api';
 import type { Letter } from '../../types';
 import ScreenHeader from '~/components/ui/ScreenHeader';
 import Base from '~/components/ui/Base';
+
+const FILTERS = ['Semua', 'Hari Ini', 'Minggu Ini'] as const;
+
+type FilterType = (typeof FILTERS)[number];
+
+function formatDate(value?: string) {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function getLetterTitle(letter: Letter) {
+  return (
+    letter.data_surat.hal ||
+    letter.data_surat.perihal ||
+    letter.data_surat.judul ||
+    letter.data_surat.subjek ||
+    letter.template?.nama ||
+    letter.nomor_surat
+  );
+}
+
+function getPriorityTag(letter: Letter) {
+  const raw =
+    letter.data_surat.prioritas ||
+    letter.data_surat.priority ||
+    letter.data_surat.mendesak ||
+    letter.data_surat.urgent;
+  if (!raw) return null;
+
+  const normalized = String(raw).toLowerCase();
+  if (normalized.includes('mendesak') || normalized.includes('urgent')) {
+    return 'Mendesak';
+  }
+
+  return 'Prioritas';
+}
 
 // Modal Approve/Reject
 function ReviewModal({
@@ -79,9 +127,7 @@ function ReviewModal({
             />
           </div>
 
-          {error && (
-            <p className="text-sm text-red-500">{error}</p>
-          )}
+          {error && <p className="text-sm text-red-500">{error}</p>}
         </div>
 
         {/* Actions */}
@@ -106,11 +152,7 @@ function ReviewModal({
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
           >
-            {loading ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <CheckCircle size={14} />
-            )}
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
             Setujui
           </button>
         </div>
@@ -125,6 +167,32 @@ export default function ApprovalPage() {
   const [letters, setLetters] = useState<Letter[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Letter | null>(null);
+  const [activeFilter, setActiveFilter] = useState<FilterType>('Semua');
+
+  const priorityLetters = useMemo(
+    () => letters.filter((letter) => Boolean(getPriorityTag(letter))),
+    [letters]
+  );
+
+  const filteredLetters = useMemo(() => {
+    if (activeFilter === 'Semua') return letters;
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    const day = now.getDay() || 7;
+    startOfWeek.setDate(now.getDate() - (day - 1));
+    startOfWeek.setHours(0, 0, 0, 0);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
+
+    return letters.filter((letter) => {
+      const date = new Date(letter.created_at);
+      if (activeFilter === 'Hari Ini') {
+        return date.toDateString() === now.toDateString();
+      }
+      return date >= startOfWeek && date <= endOfWeek;
+    });
+  }, [activeFilter, letters]);
 
   const fetchPending = () => {
     setLoading(true);
@@ -134,7 +202,9 @@ export default function ApprovalPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchPending(); }, []);
+  useEffect(() => {
+    fetchPending();
+  }, []);
 
   const handleDone = () => {
     setSelected(null);
@@ -143,66 +213,116 @@ export default function ApprovalPage() {
 
   return (
     <Base>
-      {/* Header */}
-      <ScreenHeader title="Approval Surat" description="Surat menunggu persetujuan Anda" />
+      <div className="space-y-6">
+        <ScreenHeader title="Approval Surat" description="Surat menunggu persetujuan Anda" />
 
-      {/* Loading */}
-      {loading && (
-        <div className="flex items-center justify-center py-20 text-gray-400">
-          <Loader2 size={20} className="animate-spin mr-2" />
-          <span className="text-sm">Memuat daftar surat...</span>
-        </div>
-      )}
-
-      {/* Empty */}
-      {!loading && letters.length === 0 && (
-        <div className="text-center py-20 text-gray-400">
-          <CheckCircle size={32} className="mx-auto mb-3 opacity-30" />
-          <p className="text-sm">Tidak ada surat yang menunggu persetujuan.</p>
-        </div>
-      )}
-
-      {/* List */}
-      {!loading && letters.length > 0 && (
-        <div className="space-y-3">
-          {letters.map((letter) => (
-            <div
-              key={letter.id}
-              className="flex items-center gap-4 bg-white border border-gray-200 rounded-xl p-4 hover:border-emerald-200 hover:shadow-sm transition-all"
-            >
-              {/* Icon */}
-              <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
-                <FileText size={16} className="text-amber-500" />
-              </div>
-
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-800 truncate">
-                    {letter.nomor_surat}
-                  </span>
-                  <span className="flex items-center gap-1 text-[10px] text-amber-600 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full shrink-0">
-                    <Clock size={10} />
-                    Menunggu
-                  </span>
-                </div>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {letter.template?.nama} · Dibuat oleh {letter.creator?.nama ?? '—'}
-                </p>
-              </div>
-
-              {/* Action */}
-              <button
-                onClick={() => setSelected(letter)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg hover:bg-emerald-100 transition-colors shrink-0"
-              >
-                Review
-                <ChevronRight size={12} />
-              </button>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              {FILTERS.map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => setActiveFilter(filter)}
+                  className={`rounded-full px-4 py-2 text-sm transition ${
+                    activeFilter === filter
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {filter}
+                </button>
+              ))}
             </div>
-          ))}
+            <div className="text-sm text-gray-500">
+              {filteredLetters.length} surat ditampilkan
+            </div>
+          </div>
+
+          {priorityLetters.length > 0 && (
+            <div className="rounded-3xl border border-amber-100 bg-amber-50 p-5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-amber-800">Surat Prioritas / Mendesak</p>
+                  <p className="text-sm text-amber-700">Terdapat {priorityLetters.length} surat yang ditandai prioritas</p>
+                </div>
+                <div className="rounded-full bg-white px-3 py-2 text-xs font-medium text-amber-800 border border-amber-100">
+                  {priorityLetters.length} prioritas aktif
+                </div>
+              </div>
+            </div>
+          )}
+
+          {loading && (
+            <div className="flex items-center justify-center py-20 text-gray-400">
+              <Loader2 size={20} className="animate-spin mr-2" />
+              <span className="text-sm">Memuat daftar surat...</span>
+            </div>
+          )}
+
+          {!loading && filteredLetters.length === 0 && (
+            <div className="text-center py-20 text-gray-400">
+              <CheckCircle size={32} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm">Tidak ada surat yang sesuai filter.</p>
+            </div>
+          )}
+
+          {!loading && filteredLetters.length > 0 && (
+            <div className="grid gap-4">
+              {filteredLetters.map((letter) => {
+                const priorityTag = getPriorityTag(letter);
+                return (
+                  <article
+                    key={letter.id}
+                    className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm transition hover:border-emerald-200"
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {priorityTag && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700 border border-amber-100">
+                              <Clock size={12} />
+                              {priorityTag}
+                            </span>
+                          )}
+                          <span className="text-xs font-medium uppercase tracking-[0.15em] text-gray-500">
+                            {letter.nomor_surat}
+                          </span>
+                        </div>
+                        <h2 className="mt-4 text-lg font-semibold text-gray-900 truncate">
+                          {getLetterTitle(letter)}
+                        </h2>
+                        <p className="mt-2 text-sm text-gray-500">
+                          Diajukan oleh {letter.creator?.nama ?? '—'} · {formatDate(letter.created_at)}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelected(letter)}
+                          className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 hover:border-emerald-200 hover:text-emerald-600 transition"
+                        >
+                          <Eye size={14} />
+                          Lihat detail
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelected(letter)}
+                          className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition"
+                        >
+                          <CheckCircle size={14} />
+                          Review
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Modal */}
       {selected && (

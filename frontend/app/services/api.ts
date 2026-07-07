@@ -14,14 +14,14 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    // Jangan redirect ke login untuk /sync — endpoint itu auth:sanctum di backend
-    // tapi CSV sekarang diparse di frontend tanpa API call, so ini sebagai safety net
+    // Untuk sekarang tidak redirect ke halaman login.
+    // Kita hanya pakai dashboard sebagai entry point sementara.
     const url = err.config?.url ?? '';
     const isSyncRequest = url.includes('/sync');
 
     if (err.response?.status === 401 && !isSyncRequest) {
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      // tidak redirect, biarkan komponen menangani error atau fallback ke dashboard
     }
     return Promise.reject(err);
   }
@@ -37,7 +37,13 @@ export const templateService = {
 };
 
 export const letterService = {
-  getAll:    (params?: { status?: string }) => api.get('/letters', { params }),
+  getAll:    (params?: { status?: string }) => {
+    const reqParams = params ? { ...params } : undefined;
+    if (reqParams && reqParams.status === 'pending_approval') {
+      reqParams.status = 'pending';
+    }
+    return api.get('/letters', { params: reqParams });
+  },
   getById:   (id: number)                   => api.get(`/letters/${id}`),
   create:    (data: Record<string, any>)    => api.post('/letters', data),
   approve:   (id: number, catatan?: string) => api.patch(`/letters/${id}/approve`, { catatan }),

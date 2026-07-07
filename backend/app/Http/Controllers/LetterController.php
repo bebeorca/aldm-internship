@@ -10,6 +10,9 @@ use App\Services\Letter\StoreLetterService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class LetterController extends Controller
 {
@@ -24,7 +27,7 @@ class LetterController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $user = auth()->user();
+        $user = Auth::user();
 
         $query = Letter::with(['template', 'creator', 'latestApproval.reviewer'])
             ->latest();
@@ -50,7 +53,7 @@ class LetterController extends Controller
      */
     public function show(Letter $letter): LetterResource
     {
-        $user = auth()->user();
+        $user = Auth::user();
 
         // Pembuat hanya boleh lihat suratnya sendiri
         if ($user->role === 'pembuat' && $letter->created_by !== $user->id) {
@@ -60,6 +63,129 @@ class LetterController extends Controller
         $letter->load(['template', 'creator', 'latestApproval.reviewer']);
 
         return new LetterResource($letter);
+    }
+
+    /**
+     * PATCH /api/letters/:id/approve
+     * Setujui surat yang sedang menunggu approval
+     */
+    public function approve(Request $request, Letter $letter): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user || !$user->isDirektur() && !$user->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda tidak memiliki akses untuk menyetujui surat.',
+            ], 403);
+        }
+
+        if (!$letter->isPending()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Surat ini tidak sedang menunggu approval.',
+            ], 409);
+        }
+
+        try {
+            DB::transaction(function () use ($letter, $user, $request) {
+                $letter->update([
+                    'status' => 'approved',
+                    'catatan_reject' => null,
+                ]);
+
+                $letter->approvals()->create([
+                    'reviewed_by' => $user->id,
+                    'status' => 'approved',
+                    'catatan' => $request->input('catatan'),
+                    'reviewed_at' => now(),
+                ]);
+            });
+
+            $letter->load(['template', 'creator', 'latestApproval.reviewer']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Surat berhasil disetujui.',
+                'data' => new LetterResource($letter),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('LetterController approve error', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menyetujui surat.',
+            ], 500);
+        }
+    }
+
+    /**
+     * PATCH /api/letters/:id/reject
+     * Tolak surat yang sedang menunggu approval
+     */
+    public function reject(Request $request, Letter $letter): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user || !$user->isDirektur() && !$user->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda tidak memiliki akses untuk menolak surat.',
+            ], 403);
+        }
+
+        $catatan = trim((string) $request->input('catatan', ''));
+
+        if ($catatan === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Catatan wajib diisi saat menolak surat.',
+            ], 422);
+        }
+
+        if (!$letter->isPending()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Surat ini tidak sedang menunggu approval.',
+            ], 409);
+        }
+
+        try {
+            DB::transaction(function () use ($letter, $user, $catatan) {
+                $letter->update([
+                    'status' => 'rejected',
+                    'catatan_reject' => $catatan,
+                ]);
+
+                $letter->approvals()->create([
+                    'reviewed_by' => $user->id,
+                    'status' => 'rejected',
+                    'catatan' => $catatan,
+                    'reviewed_at' => now(),
+                ]);
+            });
+
+            $letter->load(['template', 'creator', 'latestApproval.reviewer']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Surat berhasil ditolak.',
+                'data' => new LetterResource($letter),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('LetterController reject error', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menolak surat.',
+            ], 500);
+        }
     }
 
     /**
@@ -87,7 +213,7 @@ class LetterController extends Controller
             ], 422);
 
         } catch (\RuntimeException $e) {
-            \Log::error('LetterController store error', [
+            Log::error('LetterController store error', [
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);

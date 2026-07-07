@@ -15,9 +15,13 @@ Route::get('/templates/{template}', [TemplateController::class, 'show']);
 Route::post('/templates', [TemplateController::class, 'store']);
 
 Route::get('/letters', [LetterController::class, 'index']);
-Route::post('/letters', [LetterController::class, 'store']);
 Route::get('/letters/{letter}', [LetterController::class, 'show']);
 
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/letters', [LetterController::class, 'store']);
+    Route::patch('/letters/{letter}/approve', [LetterController::class, 'approve']);
+    Route::patch('/letters/{letter}/reject', [LetterController::class, 'reject']);
+});
 
 Route::get('/user', function (Request $request) {
     return $request->user();

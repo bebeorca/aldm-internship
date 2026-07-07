@@ -59,7 +59,14 @@ class Letter extends Model
     /** Filter berdasarkan status */
     public function scopeByStatus($query, string $status)
     {
-        return $query->where('status', $status);
+        // Terima beberapa alias status dari frontend
+        $map = [
+            'pending' => 'pending_approval',
+        ];
+
+        $statusToCheck = $map[$status] ?? $status;
+
+        return $query->where('status', $statusToCheck);
     }
 
     /** Surat yang menunggu approval */

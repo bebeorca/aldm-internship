@@ -12,7 +12,7 @@ export function useAuth(): UseAuthReturn {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get('/auth/me')
+    api.get('/user')
       .then((res) => setUser(res.data.data))
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
