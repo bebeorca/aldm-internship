@@ -22,10 +22,21 @@ class StoreLetterDTO
             throw new \InvalidArgumentException('Pengguna belum login. Silakan masuk kembali.');
         }
 
+        $dataSurat = $request->input('data_surat', []);
+        // Accept JSON string when sent via multipart/form-data
+        if (is_string($dataSurat)) {
+            $decoded = json_decode($dataSurat, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                $dataSurat = $decoded;
+            } else {
+                $dataSurat = [];
+            }
+        }
+
         return new self(
             templateId: (int) $request->input('template_id'),
             createdBy: $createdBy,
-            dataSurat: $request->input('data_surat', []),
+            dataSurat: $dataSurat,
         );
     }
 }

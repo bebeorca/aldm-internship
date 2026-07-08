@@ -78,6 +78,8 @@ function ApprovalModal({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'gambar' | 'upload'>('gambar');
+  const [currentSignatureUrl, setCurrentSignatureUrl] = useState<string | null>(null);
+  const [signatureLoading, setSignatureLoading] = useState(true);
   const [rejectAction, setRejectAction] = useState<RejectAction>('revision');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -94,6 +96,29 @@ function ApprovalModal({
       URL.revokeObjectURL(nextUrl);
     };
   }, [selectedFile]);
+
+  useEffect(() => {
+    let isMounted = true;
+    setSignatureLoading(true);
+
+    userService.getSignature()
+      .then((res) => {
+        const path = res.data?.data?.signature_path;
+        if (isMounted && path) {
+          setCurrentSignatureUrl(`/storage/${path}`);
+        }
+      })
+      .catch(() => {
+        if (isMounted) setCurrentSignatureUrl(null);
+      })
+      .finally(() => {
+        if (isMounted) setSignatureLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -120,6 +145,19 @@ function ApprovalModal({
   const handleApprove = async () => {
     setLoading(true);
     setError('');
+
+    if (activeTab === 'upload' && !selectedFile) {
+      setError('Pilih file tanda tangan sebelum menyetujui surat.');
+      setLoading(false);
+      return;
+    }
+
+    if (activeTab === 'gambar' && !currentSignatureUrl) {
+      setError('Tanda tangan digital belum tersedia. Silakan upload terlebih dahulu.');
+      setLoading(false);
+      return;
+    }
+
     try {
       if (activeTab === 'upload' && selectedFile) {
         await userService.uploadSignature(selectedFile);
@@ -281,7 +319,25 @@ function ApprovalModal({
               </div>
               <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 p-6 min-h-[180px] flex items-center justify-center text-center text-sm text-slate-400">
                 {activeTab === 'gambar' ? (
-                  'Gambar tanda tangan Anda di area di atas'
+                  signatureLoading ? (
+                    'Memuat tanda tangan Anda...'
+                  ) : currentSignatureUrl ? (
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-3">
+                        <img
+                          src={currentSignatureUrl}
+                          alt="Tanda tangan yang tersimpan"
+                          className="h-36 w-full object-contain"
+                        />
+                      </div>
+                      <p className="text-sm text-slate-500">Tanda tangan ini akan digunakan saat surat disetujui.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold text-slate-900">Tanda tangan belum tersedia.</p>
+                      <p className="text-sm text-slate-500">Silakan unggah tanda tangan pada tab Upload Gambar sebelum mengonfirmasi approval.</p>
+                    </div>
+                  )
                 ) : (
                   <div className="w-full">
                     <input
@@ -409,7 +465,7 @@ function ApprovalModal({
           </button>
           <button
             onClick={isReject ? handleReject : handleApprove}
-            disabled={loading}
+            disabled={loading || (!isReject && ((activeTab === 'gambar' && !currentSignatureUrl && !signatureLoading) || (activeTab === 'upload' && !selectedFile)))}
             className={`w-full rounded-3xl px-4 py-3 text-sm font-semibold text-white transition ${
               isReject ? primaryButtonClass : 'bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300'
             }`}

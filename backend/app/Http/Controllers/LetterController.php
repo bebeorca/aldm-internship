@@ -87,6 +87,13 @@ class LetterController extends Controller
             ], 409);
         }
 
+        if (!$user->hasSignature()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tanda tangan digital belum tersedia. Upload tanda tangan terlebih dahulu sebelum menyetujui surat.',
+            ], 422);
+        }
+
         try {
             DB::transaction(function () use ($letter, $user, $request) {
                 $letter->update([
@@ -205,6 +212,26 @@ class LetterController extends Controller
     public function store(StoreLetterRequest $request): JsonResponse
     {
         try {
+            // Jika ada file lampiran, simpan ke disk public dan masukkan ke data_surat
+            if ($request->hasFile('attachment')) {
+                try {
+                    $file = $request->file('attachment');
+                    $originalName = $file->getClientOriginalName();
+                    $uploaded = $file->store('letters/attachments', 'public');
+                    $existing = $request->input('data_surat', []);
+                    if (is_string($existing)) {
+                        $decoded = json_decode($existing, true);
+                        $existing = is_array($decoded) ? $decoded : [];
+                    }
+                    $existing['lampiran'] = $originalName;
+                    $existing['lampiran_path'] = $uploaded;
+                    // merge back into request so DTO picks it up
+                    $request->merge(['data_surat' => $existing]);
+                } catch (\Throwable $e) {
+                    Log::error('Failed to store attachment', ['message' => $e->getMessage()]);
+                }
+            }
+
             $dto = StoreLetterDTO::fromRequest($request);
             $letter = $this->storeLetterService->handle($dto);
 

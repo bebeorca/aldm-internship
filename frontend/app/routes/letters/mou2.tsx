@@ -112,10 +112,28 @@ export default function MouTwoPage() {
     setSubmitError('');
 
     try {
-      await letterService.create({
-        template_id: selected?.id,
-        data_surat: formData,
-      });
+      // Build payload; if there's an attachment file, send multipart/form-data
+      const payloadData = { ...formData } as Record<string, any>;
+      if (attachment) payloadData.lampiran = attachment.name;
+
+      if (attachment) {
+        const form = new FormData();
+        form.append('template_id', String(selected?.id ?? ''));
+        // Append data_surat fields as form array entries
+        Object.entries(payloadData).forEach(([k, v]) => {
+          form.append(`data_surat[${k}]`, String(v ?? ''));
+        });
+        form.append('attachment', attachment);
+
+        // Use api instance to send multipart form
+        const api = (await import('../../services/api')).default;
+        await api.post('/letters', form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else {
+        await letterService.create({ template_id: selected?.id, data_surat: payloadData });
+      }
+
       navigate('/letters'); // redirect ke arsip setelah berhasil
     } catch (err: any) {
       const serverMessage = err?.response?.data?.message;

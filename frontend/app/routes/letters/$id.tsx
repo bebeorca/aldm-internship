@@ -26,6 +26,19 @@ function formatDate(value?: string) {
   });
 }
 
+function getDataField(data: Record<string, any> | undefined, ...keys: string[]) {
+  if (!data) return undefined;
+  const normalized: Record<string, any> = {};
+  for (const k of Object.keys(data)) normalized[k.toLowerCase()] = data[k];
+  for (const key of keys) {
+    const v1 = data[key];
+    if (v1 !== undefined && v1 !== null && String(v1).trim() !== '') return v1;
+    const v2 = normalized[key.toLowerCase()];
+    if (v2 !== undefined && v2 !== null && String(v2).trim() !== '') return v2;
+  }
+  return undefined;
+}
+
 export default function LetterDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -41,7 +54,7 @@ export default function LetterDetailPage() {
     setLoading(true);
     setError(null);
     letterService.getById(Number(id))
-      .then((res) => setLetter(res.data))
+      .then((res) => setLetter(res.data?.data ?? res.data))
       .catch((err) => {
         setError(err.response?.status === 401 ? 'Akses tidak sah. Silakan login ulang.' : 'Gagal memuat detail surat.');
       })
@@ -129,10 +142,12 @@ export default function LetterDetailPage() {
   }
 
   const status = STATUS_LABELS[letter.status] ?? STATUS_LABELS.draft;
-  const subject = letter.data_surat?.hal || letter.data_surat?.perihal || letter.data_surat?.judul || letter.nomor_surat || '—';
-  const tanggal = letter.data_surat?.tanggal || letter.created_at;
-  const penerima = letter.data_surat?.kepada || 'Kepala Divisi Keuangan PT. ALDM';
-  const dept = letter.data_surat?.departemen || 'Keuangan';
+  const subject = getDataField(letter.data_surat, 'hal', 'perihal', 'judul') ?? '—';
+  const tanggal = getDataField(letter.data_surat, 'tanggal') || letter.created_at;
+  const penerima = getDataField(letter.data_surat, 'kepada') || 'Kepala Divisi Keuangan PT. ALDM';
+  const dept = getDataField(letter.data_surat, 'departemen') || 'Keuangan';
+  const attachmentPath = getDataField(letter.data_surat, 'lampiran_path', 'attachment_path');
+  const attachmentName = getDataField(letter.data_surat, 'lampiran', 'attachment') || attachmentPath?.split('/').pop();
 
   return (
     <Base>
@@ -202,11 +217,11 @@ export default function LetterDetailPage() {
               <div className="space-y-3 text-sm text-slate-700">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-[120px_1fr]">
                   <span className="font-semibold">Nomor</span>
-                  <span>: {letter.nomor_surat}</span>
+                  <span>: {letter.nomor_surat || letter.id}</span>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-[120px_1fr]">
                   <span className="font-semibold">Lampiran</span>
-                  <span>: {letter.data_surat?.lampiran || '-'}</span>
+                  <span>: {attachmentName || '-'}</span>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-[120px_1fr]">
                   <span className="font-semibold">Hal</span>
@@ -252,7 +267,8 @@ export default function LetterDetailPage() {
                   <span>Status</span>
                   <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${status.className}`}>{status.text}</span>
                 </div>
-                <div className="flex items-center justify-between"><span>Nomor</span><span className="text-slate-900">{letter.nomor_surat}</span></div>
+                <div className="flex items-center justify-between"><span>ID</span><span className="text-slate-900">{letter.id}</span></div>
+                <div className="flex items-center justify-between"><span>Nomor</span><span className="text-slate-900">{letter.nomor_surat || '-'}</span></div>
                 <div className="flex items-center justify-between"><span>Jenis</span><span className="text-slate-900">{letter.template?.nama || 'Nota Dinas'}</span></div>
                 <div className="flex items-center justify-between"><span>Pembuat</span><span className="text-slate-900">{letter.creator?.nama || '—'}</span></div>
                 <div className="flex items-center justify-between"><span>Departemen</span><span className="text-slate-900">{dept}</span></div>
