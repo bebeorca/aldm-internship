@@ -75,6 +75,12 @@ class Letter extends Model
         return $query->where('status', 'pending_approval');
     }
 
+    /** Surat yang dikembalikan untuk revisi */
+    public function scopeRevision($query)
+    {
+        return $query->where('status', 'revision');
+    }
+
     /** Surat yang sudah disetujui */
     public function scopeApproved($query)
     {
@@ -94,6 +100,11 @@ class Letter extends Model
     public function isDraft(): bool
     {
         return $this->status === 'draft';
+    }
+
+    public function isRevision(): bool
+    {
+        return $this->status === 'revision';
     }
 
     public function isPending(): bool

@@ -51,12 +51,12 @@ class LetterController extends Controller
      * GET /api/letters/:id
      * Detail satu surat
      */
-    public function show(Letter $letter): LetterResource
+    public function show(Request $request, Letter $letter): LetterResource
     {
-        $user = Auth::user();
+        $user = $request->user();
 
         // Pembuat hanya boleh lihat suratnya sendiri
-        if ($user->role === 'pembuat' && $letter->created_by !== $user->id) {
+        if ($user && $user->role === 'pembuat' && $letter->created_by !== $user->id) {
             abort(403, 'Anda tidak memiliki akses ke surat ini.');
         }
 
@@ -138,6 +138,7 @@ class LetterController extends Controller
         }
 
         $catatan = trim((string) $request->input('catatan', ''));
+        $action = strtolower(trim((string) $request->input('action', 'permanent')));
 
         if ($catatan === '') {
             return response()->json([
@@ -153,10 +154,19 @@ class LetterController extends Controller
             ], 409);
         }
 
+        $allowedActions = ['revision', 'permanent'];
+        if (!in_array($action, $allowedActions, true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Aksi penolakan tidak valid.',
+            ], 422);
+        }
+
         try {
-            DB::transaction(function () use ($letter, $user, $catatan) {
+            DB::transaction(function () use ($letter, $user, $catatan, $action) {
                 $letter->update([
-                    'status' => 'rejected',
+                    // gunakan status khusus "revision" agar bisa dibedakan dari "draft"
+                    'status' => $action === 'revision' ? 'revision' : 'rejected',
                     'catatan_reject' => $catatan,
                 ]);
 
@@ -224,5 +234,45 @@ class LetterController extends Controller
                 'debug' => $e->getMessage(), // ← tambah ini sementara
             ], 500);
         }
+    }
+
+    /**
+     * GET /api/letters/:id/export?format=pdf|docx
+     * Download exported document (only for approved letters).
+     */
+    public function export(Request $request, Letter $letter)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized.'], 401);
+        }
+
+        if (!$letter->canExport()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Surat belum disetujui untuk diekspor.',
+            ], 403);
+        }
+
+        $format = strtolower(trim((string) $request->input('format', 'pdf')));
+        if (!in_array($format, ['pdf', 'docx'], true)) {
+            return response()->json(['success' => false, 'message' => 'Format tidak valid. Gunakan pdf atau docx.'], 422);
+        }
+
+        $filePath = $format === 'pdf' ? $letter->path_pdf : $letter->path_docx;
+        if (!$filePath) {
+            return response()->json(['success' => false, 'message' => 'File tidak tersedia.'], 404);
+        }
+
+        $fullPath = storage_path('app/public/' . ltrim($filePath, '/'));
+        if (!file_exists($fullPath)) {
+            return response()->json(['success' => false, 'message' => 'File tidak ditemukan di server.'], 404);
+        }
+
+        $mime = $format === 'pdf'
+            ? 'application/pdf'
+            : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+        return response()->download($fullPath, basename($filePath), ['Content-Type' => $mime]);
     }
 }

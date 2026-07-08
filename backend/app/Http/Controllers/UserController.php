@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\UploadSignatureRequest;
 use App\Services\User\SignatureService;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -12,9 +13,11 @@ use Illuminate\Support\Facades\Storage;
 
 class UserController extends Controller
 {
-    public function __construct(
-        private readonly SignatureService $signatureService,
-    ) {
+    private SignatureService $signatureService;
+
+    public function __construct(SignatureService $signatureService)
+    {
+        $this->signatureService = $signatureService;
     }
 
     /**
@@ -23,8 +26,8 @@ class UserController extends Controller
      */
     public function uploadSignature(UploadSignatureRequest $request): JsonResponse
     {
-        if (auth()->user()?->role !== 'direktur') {
-            return response()->json([
+        if (Auth::user()?->role !== 'direktur') {
+            return Response::json([
                 'success' => false,
                 'message' => 'Akses ditolak. Hanya Direktur yang dapat mengelola tanda tangan.',
             ], 403);
@@ -34,13 +37,15 @@ class UserController extends Controller
             /** @var \App\Models\User $user */
             $user = Auth::user();
             $path = $this->signatureService->upload($user, $request->file('signature'));
+            /** @var FilesystemAdapter $disk */
+            $disk = Storage::disk('public');
 
             return Response::json([
                 'success' => true,
                 'message' => 'Tanda tangan berhasil disimpan.',
                 'data' => [
                     'signature_path' => $path,
-                    'signature_url' => Storage::disk('public')->url($path),
+                    'signature_url' => $disk->url($path),
                 ],
             ]);
         } catch (\Exception $e) {
@@ -62,16 +67,17 @@ class UserController extends Controller
      */
     public function getSignature(): JsonResponse
     {
-        if (auth()->user()?->role !== 'direktur') {
-            return response()->json([
+        if (Auth::user()?->role !== 'direktur') {
+            return Response::json([
                 'success' => false,
                 'message' => 'Akses ditolak.',
             ], 403);
         }
 
-        $user = auth()->user();
+        /** @var \App\Models\User|null $user */
+        $user = Auth::user();
 
-        if (!$user->hasSignature()) {
+        if (!$user || !$user->hasSignature()) {
             return Response::json([
                 'success' => false,
                 'message' => 'Tanda tangan belum diupload.',
@@ -79,11 +85,14 @@ class UserController extends Controller
             ]);
         }
 
+        /** @var FilesystemAdapter $disk */
+        $disk = Storage::disk('public');
+
         return Response::json([
             'success' => true,
             'data' => [
                 'signature_path' => $user->signature_path,
-                'signature_url' => Storage::disk('public')->url($user->signature_path),
+                'signature_url' => $disk->url($user->signature_path),
             ],
         ]);
     }

@@ -1,5 +1,5 @@
 export type Role = 'pembuat' | 'direktur' | 'admin';
-export type LetterStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected';
+export type LetterStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'revision';
 
 export interface User {
   id: number;

@@ -16,6 +16,7 @@ class LetterResource extends JsonResource
             'data_surat'   => $this->data_surat,
             'path_docx'    => $this->path_docx,
             'path_pdf'     => $this->path_pdf,
+            'catatan_reject' => $this->catatan_reject,
             'created_at'   => $this->created_at?->toDateTimeString(),
             'updated_at'   => $this->updated_at?->toDateTimeString(),
 

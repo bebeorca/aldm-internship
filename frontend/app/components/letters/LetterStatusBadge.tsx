@@ -2,8 +2,9 @@
 import type { LetterStatus } from '../../types';
 
 const STATUS_MAP: Record<LetterStatus, { label: string; className: string }> = {
-  draft:            { label: 'Draft',     className: 'bg-gray-100 text-gray-500' },
+  draft:            { label: 'Perlu Revisi',     className: 'bg-amber-100 text-amber-700' },
   pending_approval: { label: 'Menunggu',  className: 'bg-amber-50 text-amber-600' },
+  revision:         { label: 'Perlu Revisi', className: 'bg-amber-100 text-amber-700' },
   approved:         { label: 'Disetujui', className: 'bg-emerald-50 text-emerald-600' },
   rejected:         { label: 'Ditolak',   className: 'bg-red-50 text-red-500' },
 };

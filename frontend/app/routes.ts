@@ -18,6 +18,7 @@ export default [
     route("dashboard/templates", "routes/dashboard/templates/index.tsx"),
     route("dashboard/templates/new", "routes/dashboard/templates/new.tsx"),
     route("letters", "routes/letters/index.tsx"),
+    route("letters/:id", "routes/letters/$id.tsx"),
     route("letters/create/mou", "routes/letters/mou.tsx"),
     route("letters/create/mou2", "routes/letters/mou2.tsx"),
     route("approval", "routes/approval/index.tsx"),

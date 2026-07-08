@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
@@ -17,11 +17,7 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
-        // if (!$user || !\Hash::check($request->password, $user->password)) {
-        //     return response()->json(['message' => 'Email atau password salah'], 401);
-        // }
-
-        if (!$user) {
+        if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json(['message' => 'Email atau password salah'], 401);
         }
 

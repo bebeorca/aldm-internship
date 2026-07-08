@@ -9,6 +9,7 @@ import {
   Loader2,
   FileText,
   ChevronRight,
+  RotateCcw,
 } from 'lucide-react';
 import { letterService } from '../../services/api';
 import type { Letter } from '../../types';
@@ -18,6 +19,8 @@ import Base from '~/components/ui/Base';
 const FILTERS = ['Semua', 'Hari Ini', 'Minggu Ini'] as const;
 
 type FilterType = (typeof FILTERS)[number];
+type ModalMode = 'signature' | 'reject' | null;
+type RejectAction = 'revision' | 'permanent';
 
 function formatDate(value?: string) {
   if (!value) return '—';
@@ -55,105 +58,261 @@ function getPriorityTag(letter: Letter) {
   return 'Prioritas';
 }
 
-// Modal Approve/Reject
-function ReviewModal({
+// Modal untuk Approval (Signature form)
+function ApprovalModal({
   letter,
+  mode,
   onClose,
   onDone,
 }: {
   letter: Letter;
+  mode: ModalMode;
   onClose: () => void;
   onDone: () => void;
 }) {
   const [catatan, setCatatan] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState<'gambar' | 'upload'>('gambar');
+  const [rejectAction, setRejectAction] = useState<RejectAction>('revision');
 
-  const handle = async (action: 'approve' | 'reject') => {
-    if (action === 'reject' && !catatan.trim()) {
-      setError('Catatan wajib diisi saat menolak surat.');
-      return;
-    }
+  const handleApprove = async () => {
     setLoading(true);
     setError('');
     try {
-      if (action === 'approve') {
-        await letterService.approve(letter.id, catatan);
-      } else {
-        await letterService.reject(letter.id, catatan);
-      }
+      await letterService.approve(letter.id, catatan);
       onDone();
     } catch {
-      setError('Gagal memproses. Coba lagi.');
+      setError('Gagal mengesahkan surat. Coba lagi.');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleReject = async () => {
+    if (!catatan.trim()) {
+      setError('Alasan wajib diisi.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      await letterService.reject(letter.id, {
+        catatan,
+        action: rejectAction,
+      } as any);
+      onDone();
+    } catch {
+      setError('Gagal mengirim keputusan. Coba lagi.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!mode) return null;
+
+  const isReject = mode === 'reject';
+  const actionLabel = rejectAction === 'revision' ? 'Minta Revisi' : 'Tolak Permanen';
+  const actionDescription =
+    rejectAction === 'revision'
+      ? 'Surat dikembalikan untuk diperbaiki'
+      : 'Surat ditolak dan tidak dilanjutkan';
+  const primaryButtonText =
+    rejectAction === 'revision' ? 'Kirim Feedback' : 'Tolak Surat';
+  const primaryButtonClass =
+    rejectAction === 'revision'
+      ? 'bg-amber-500 hover:bg-amber-600 disabled:bg-amber-200'
+      : 'bg-red-500 hover:bg-red-600 disabled:bg-red-200';
+
   return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="w-full max-w-lg rounded-[28px] border border-slate-200 bg-white shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="px-6 pt-6 pb-4 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-800">Review Surat</h2>
-          <p className="text-sm text-gray-400 mt-0.5">{letter.nomor_surat}</p>
+        <div className="flex items-center justify-between gap-4 px-6 py-5 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-11 h-11 rounded-2xl flex items-center justify-center text-white ${
+                isReject ? 'bg-red-500' : 'bg-emerald-500'
+              }`}
+            >
+              {isReject ? <XCircle size={22} /> : <FileText size={22} />}
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                {isReject ? actionLabel : 'Tambahkan Tanda Tangan'}
+              </h2>
+              <p className="text-sm text-slate-500 mt-1">
+                Surat yang disetujui:{' '}
+                <span className="font-semibold text-slate-900">{letter.nomor_surat}</span>
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-2xl leading-none text-slate-400 transition hover:text-slate-700"
+            aria-label="Tutup"
+          >
+            ×
+          </button>
         </div>
 
         {/* Body */}
-        <div className="px-6 py-4 space-y-4">
-          {/* Info surat */}
-          <div className="bg-gray-50 rounded-lg p-3 space-y-1.5">
-            {Object.entries(letter.data_surat).map(([k, v]) => (
-              <div key={k} className="flex gap-2 text-sm">
-                <span className="text-gray-400 capitalize w-32 shrink-0">
-                  {k.replace(/_/g, ' ')}
-                </span>
-                <span className="text-gray-700">{v}</span>
-              </div>
-            ))}
+        <div className="space-y-6 px-6 py-6">
+          <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-500 mb-2">
+              Surat yang ditinjau
+            </p>
+            <p className="text-sm font-semibold text-slate-900">
+              {letter.data_surat?.hal || letter.data_surat?.perihal || letter.nomor_surat}
+            </p>
+            <p className="text-sm text-slate-500 mt-1">{letter.nomor_surat}</p>
           </div>
 
-          {/* Catatan */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Catatan <span className="text-gray-400 font-normal">(wajib jika ditolak)</span>
+          {isReject ? (
+            <>
+              <div>
+                <p className="text-sm font-semibold text-slate-900 mb-3">Jenis Tindakan</p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setRejectAction('revision')}
+                  className={`rounded-[24px] border px-4 py-5 text-left transition ${
+                    rejectAction === 'revision'
+                      ? 'border-amber-300 bg-amber-50 shadow-sm'
+                      : 'border-slate-200 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-3 text-amber-700">
+                    <RotateCcw size={18} />
+                    <span className="font-semibold">Minta Revisi</span>
+                  </div>
+                  <p className="text-sm text-slate-500">Surat dikembalikan untuk diperbaiki</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setRejectAction('permanent')}
+                  className={`rounded-[24px] border px-4 py-5 text-left transition ${
+                    rejectAction === 'permanent'
+                      ? 'border-red-300 bg-red-50 shadow-sm'
+                      : 'border-slate-200 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-3 text-red-600">
+                    <XCircle size={18} />
+                    <span className="font-semibold">Tolak Permanen</span>
+                  </div>
+                  <p className="text-sm text-slate-500">Surat ditolak dan tidak dilanjutkan</p>
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-1 grid grid-cols-2 gap-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('gambar')}
+                  className={`rounded-[20px] py-3 text-sm font-semibold transition ${
+                    activeTab === 'gambar'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Gambar TTD
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('upload')}
+                  className={`rounded-[20px] py-3 text-sm font-semibold transition ${
+                    activeTab === 'upload'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Upload Gambar
+                </button>
+              </div>
+              <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 p-6 min-h-[180px] flex items-center justify-center text-center text-sm text-slate-400">
+                {activeTab === 'gambar'
+                  ? 'Gambar tanda tangan Anda di area di atas'
+                  : 'Unggah file gambar tanda tangan Anda di sini'}
+              </div>
+
+              <div className="rounded-[24px] border border-slate-200 bg-white p-4">
+                <p className="text-sm font-semibold text-slate-900 mb-3">Posisi TTD pada Dokumen</p>
+                <div className="flex gap-4 rounded-3xl border border-dashed border-emerald-300 bg-slate-50 p-4 items-center">
+                  <div className="min-w-[80px] h-20 rounded-2xl bg-white border border-slate-200" />
+                  <p className="text-sm leading-6 text-slate-500">
+                    TTD akan ditempatkan di blok tanda tangan bagian kanan bawah dokumen secara otomatis.
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="space-y-3">
+            <label className="block text-sm font-semibold text-slate-900">
+              {isReject ? (rejectAction === 'revision' ? 'Catatan Revisi *' : 'Alasan Penolakan *') : 'Catatan Persetujuan'}
             </label>
             <textarea
               value={catatan}
               onChange={(e) => setCatatan(e.target.value)}
-              rows={3}
-              placeholder="Tambahkan catatan untuk pembuat surat..."
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none placeholder:text-gray-300"
+              rows={4}
+              placeholder={
+                isReject
+                  ? rejectAction === 'revision'
+                    ? 'Jelaskan bagian yang perlu direvisi...'
+                    : 'Jelaskan alasan penolakan...'
+                  : 'Tambahkan catatan jika diperlukan...'
+              }
+              className={`w-full min-h-[110px] rounded-3xl border px-4 py-3 text-sm text-slate-700 focus:ring-2 resize-none placeholder:text-slate-300 ${
+                error ? 'border-red-200 bg-red-50 focus:border-red-400 focus:ring-red-100' : 'border-slate-200 bg-white focus:border-emerald-500 focus:ring-emerald-100'
+              }`}
             />
           </div>
 
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {error && (
+            <div className="rounded-3xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
         </div>
 
         {/* Actions */}
-        <div className="px-6 pb-6 flex gap-3 justify-end">
+        <div className="flex flex-col gap-3 px-6 pb-6 md:flex-row">
           <button
             onClick={onClose}
             disabled={loading}
-            className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            className="w-full rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition"
           >
             Batal
           </button>
           <button
-            onClick={() => handle('reject')}
+            onClick={isReject ? handleReject : handleApprove}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-red-50 text-red-600 border border-red-100 rounded-lg hover:bg-red-100 disabled:opacity-50 transition-colors"
+            className={`w-full rounded-3xl px-4 py-3 text-sm font-semibold text-white transition ${
+              isReject ? primaryButtonClass : 'bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300'
+            }`}
           >
-            <XCircle size={14} />
-            Tolak
-          </button>
-          <button
-            onClick={() => handle('approve')}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-          >
-            {loading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
-            Setujui
+            {loading ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <>
+                {isReject ? (
+                  <span className="inline-flex items-center gap-2 justify-center">
+                    {rejectAction === 'revision' ? <RotateCcw size={16} /> : <XCircle size={16} />}
+                    {primaryButtonText}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-2 justify-center">
+                    <CheckCircle size={16} />
+                    Konfirmasi & Setujui
+                  </span>
+                )}
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -167,6 +326,7 @@ export default function ApprovalPage() {
   const [letters, setLetters] = useState<Letter[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Letter | null>(null);
+  const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [activeFilter, setActiveFilter] = useState<FilterType>('Semua');
 
   const priorityLetters = useMemo(
@@ -205,11 +365,6 @@ export default function ApprovalPage() {
   useEffect(() => {
     fetchPending();
   }, []);
-
-  const handleDone = () => {
-    setSelected(null);
-    fetchPending();
-  };
 
   return (
     <Base>
@@ -274,46 +429,65 @@ export default function ApprovalPage() {
                 return (
                   <article
                     key={letter.id}
-                    className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm transition hover:border-emerald-200"
+                    className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-gray-300"
                   >
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          {priorityTag && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700 border border-amber-100">
-                              <Clock size={12} />
-                              {priorityTag}
+                    <div className="flex flex-col gap-4 lg:gap-6">
+                      {/* Main Content */}
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        {/* Letter Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-3">
+                            {priorityTag && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700 border border-amber-200">
+                                <Clock size={11} />
+                                {priorityTag}
+                              </span>
+                            )}
+                            <span className="text-xs font-semibold uppercase tracking-[0.1em] text-gray-500 bg-gray-50 px-3 py-1 rounded-full">
+                              {letter.nomor_surat}
                             </span>
-                          )}
-                          <span className="text-xs font-medium uppercase tracking-[0.15em] text-gray-500">
-                            {letter.nomor_surat}
-                          </span>
+                          </div>
+                          <h2 className="text-base font-semibold text-gray-900 line-clamp-2">
+                            {getLetterTitle(letter)}
+                          </h2>
+                          <p className="mt-2 text-sm text-gray-500">
+                            Diajukan oleh <span className="font-medium">{letter.creator?.nama ?? '—'}</span> · {formatDate(letter.created_at)}
+                          </p>
                         </div>
-                        <h2 className="mt-4 text-lg font-semibold text-gray-900 truncate">
-                          {getLetterTitle(letter)}
-                        </h2>
-                        <p className="mt-2 text-sm text-gray-500">
-                          Diajukan oleh {letter.creator?.nama ?? '—'} · {formatDate(letter.created_at)}
-                        </p>
-                      </div>
 
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setSelected(letter)}
-                          className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 hover:border-emerald-200 hover:text-emerald-600 transition"
-                        >
-                          <Eye size={14} />
-                          Lihat detail
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSelected(letter)}
-                          className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition"
-                        >
-                          <CheckCircle size={14} />
-                          Review
-                        </button>
+                        {/* Actions */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/letters/${letter.id}`)}
+                            className="inline-flex items-center justify-center w-10 h-10 rounded-full border border-gray-200 bg-white text-gray-600 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-600 transition"
+                            title="Lihat detail"
+                          >
+                            <Eye size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelected(letter);
+                              setModalMode('signature');
+                            }}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition"
+                          >
+                            <CheckCircle size={14} />
+                            <span className="hidden sm:inline">Setujui</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelected(letter);
+                              setModalMode('reject');
+                            }}
+                            className="inline-flex items-center justify-center w-10 h-10 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition"
+                            title="Tolak"
+                          >
+                            <XCircle size={16} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </article>
@@ -325,11 +499,19 @@ export default function ApprovalPage() {
       </div>
 
       {/* Modal */}
-      {selected && (
-        <ReviewModal
+      {selected && modalMode && (
+        <ApprovalModal
           letter={selected}
-          onClose={() => setSelected(null)}
-          onDone={handleDone}
+          mode={modalMode}
+          onClose={() => {
+            setSelected(null);
+            setModalMode(null);
+          }}
+          onDone={() => {
+            setSelected(null);
+            setModalMode(null);
+            navigate('/letters');
+          }}
         />
       )}
     </Base>

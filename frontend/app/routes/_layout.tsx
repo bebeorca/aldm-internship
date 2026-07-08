@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { usePendingCount } from '../hooks/usePendingCount';
+import { useRevisionCount } from '../hooks/useRevisionCount';
 
 const SUBMENU_ITEMS = [
   { to: '/letters/create/mou', label: 'MoU' },
@@ -40,15 +41,19 @@ export default function RootLayout() {
   const location  = useLocation();
   const { user, loading } = useAuth();
   const pendingCount = usePendingCount();
+  const revisionCount = useRevisionCount();
 
   const isCreateActive = location.pathname.startsWith('/letters/create');
   const [createOpen, setCreateOpen] = useState(isCreateActive);
 
-  // ── Role-based route guard ──────────────────────────────────────────────
-  // Redirect non-direktur yang mencoba akses halaman direktur-only.
-  // Merge-safe: tidak menyentuh approval endpoint/API structure.
+  // ── Authentication and role guard ───────────────────────────────────────
   useEffect(() => {
-    if (loading || !user) return;
+    if (loading) return;
+
+    if (!user) {
+      navigate('/login', { replace: true });
+      return;
+    }
 
     const isDirektorOnlyPath = DIREKTUR_ONLY_PATHS.some((p) =>
       location.pathname.startsWith(p)
@@ -156,42 +161,33 @@ export default function RootLayout() {
           >
             <Archive size={15} className="shrink-0" />
             <span>Arsip surat</span>
-          </NavLink>
-
-          {/* Approval — semua role bisa lihat di sidebar, guard di dalam page */}
-          <NavLink
-            to="/approval"
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                isActive
-                  ? 'bg-emerald-50 text-emerald-700 font-medium'
-                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-              }`
-            }
-          >
-            <CheckSquare size={15} className="shrink-0" />
-            <span className="flex-1">Approval</span>
-            {pendingCount > 0 && (
-              <span className="bg-red-500 text-white text-[10px] font-medium px-1.5 py-0.5 rounded-full leading-none">
-                {pendingCount}
+            {revisionCount > 0 && (
+              <span className="ml-2 inline-flex items-center justify-center rounded-full bg-amber-600 text-white text-[10px] font-medium px-2 py-0.5">
+                {revisionCount}
               </span>
             )}
           </NavLink>
 
-          {/* Sinkron Data */}
-          <NavLink
-            to="/sync"
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                isActive
-                  ? 'bg-emerald-50 text-emerald-700 font-medium'
-                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-              }`
-            }
-          >
-            <RefreshCw size={15} className="shrink-0" />
-            <span>Sinkron data</span>
-          </NavLink>
+          {user?.role === 'direktur' && (
+            <NavLink
+              to="/approval"
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                  isActive
+                    ? 'bg-emerald-50 text-emerald-700 font-medium'
+                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                }`
+              }
+            >
+              <CheckSquare size={15} className="shrink-0" />
+              <span className="flex-1">Approval</span>
+              {pendingCount > 0 && (
+                <span className="bg-red-500 text-white text-[10px] font-medium px-1.5 py-0.5 rounded-full leading-none">
+                  {pendingCount}
+                </span>
+              )}
+            </NavLink>
+          )}
 
           {/* Pengaturan — hanya tampil untuk direktur */}
           {user?.role === 'direktur' && (

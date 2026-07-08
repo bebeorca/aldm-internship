@@ -13,6 +13,7 @@ export function useAuth(): UseAuthReturn {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
+    
     if (!token) {
       setLoading(false);
       return;
@@ -20,10 +21,13 @@ export function useAuth(): UseAuthReturn {
 
     api.get('/user')
       .then((res) => {
-        const payload = res?.data?.data ?? res?.data ?? null;
-        setUser(payload);
+        // API returns user object directly, not wrapped in data
+        setUser(res.data);
       })
-      .catch(() => setUser(null))
+      .catch((err) => {
+        console.error('[useAuth] Failed to fetch user:', err.message);
+        setUser(null);
+      })
       .finally(() => setLoading(false));
   }, []);
 

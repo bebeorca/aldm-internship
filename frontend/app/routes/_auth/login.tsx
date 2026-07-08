@@ -31,7 +31,7 @@ export default function LoginPage() {
       }
 
       localStorage.setItem('token', token);
-      navigate('/dashboard', { replace: true });
+      window.location.href = '/dashboard';
     } catch (err: any) {
       const msg = err?.response?.data?.message ?? 'Email atau kata sandi salah.';
       setError(msg);
