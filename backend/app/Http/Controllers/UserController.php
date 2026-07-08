@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\Storage;
+use App\Models\User;
 
 class UserController extends Controller
 {
@@ -67,17 +68,21 @@ class UserController extends Controller
      */
     public function getSignature(): JsonResponse
     {
-        if (Auth::user()?->role !== 'direktur') {
-            return Response::json([
-                'success' => false,
-                'message' => 'Akses ditolak.',
-            ], 403);
-        }
-
-        /** @var \App\Models\User|null $user */
+        /** @var User|null $user */
         $user = Auth::user();
 
-        if (!$user || !$user->hasSignature()) {
+        if (!$user) {
+            return Response::json([
+                'success' => false,
+                'message' => 'Pengguna tidak ditemukan.',
+            ], 401);
+        }
+
+        $signatureOwner = $user->role === 'direktur'
+            ? $user
+            : User::query()->where('role', 'direktur')->first();
+
+        if (!$signatureOwner || !$signatureOwner->hasSignature()) {
             return Response::json([
                 'success' => false,
                 'message' => 'Tanda tangan belum diupload.',
@@ -91,8 +96,8 @@ class UserController extends Controller
         return Response::json([
             'success' => true,
             'data' => [
-                'signature_path' => $user->signature_path,
-                'signature_url' => $disk->url($user->signature_path),
+                'signature_path' => $signatureOwner->signature_path,
+                'signature_url' => $disk->url($signatureOwner->signature_path),
             ],
         ]);
     }

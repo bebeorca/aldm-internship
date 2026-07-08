@@ -1,5 +1,5 @@
 // src/routes/approval/index.tsx
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
   CheckCircle,
@@ -10,8 +10,9 @@ import {
   FileText,
   ChevronRight,
   RotateCcw,
+  Upload,
 } from 'lucide-react';
-import { letterService } from '../../services/api';
+import { letterService, userService } from '../../services/api';
 import type { Letter } from '../../types';
 import ScreenHeader from '~/components/ui/ScreenHeader';
 import Base from '~/components/ui/Base';
@@ -73,17 +74,61 @@ function ApprovalModal({
   const [catatan, setCatatan] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [uploadError, setUploadError] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'gambar' | 'upload'>('gambar');
   const [rejectAction, setRejectAction] = useState<RejectAction>('revision');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!selectedFile) {
+      setPreviewUrl(null);
+      return;
+    }
+
+    const nextUrl = URL.createObjectURL(selectedFile);
+    setPreviewUrl(nextUrl);
+
+    return () => {
+      URL.revokeObjectURL(nextUrl);
+    };
+  }, [selectedFile]);
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    const isAllowed = allowedTypes.includes(file.type) || ['png', 'jpg', 'jpeg'].includes(extension ?? '');
+
+    if (!isAllowed) {
+      setSelectedFile(null);
+      setUploadError('Format file tidak didukung. Pilih gambar PNG, JPG, atau JPEG.');
+      event.target.value = '';
+      return;
+    }
+
+    setUploadError('');
+    setSelectedFile(file);
+  };
 
   const handleApprove = async () => {
     setLoading(true);
     setError('');
     try {
+      if (activeTab === 'upload' && selectedFile) {
+        await userService.uploadSignature(selectedFile);
+      }
+
       await letterService.approve(letter.id, catatan);
       onDone();
-    } catch {
-      setError('Gagal mengesahkan surat. Coba lagi.');
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Gagal mengesahkan surat. Coba lagi.');
     } finally {
       setLoading(false);
     }
@@ -235,15 +280,88 @@ function ApprovalModal({
                 </button>
               </div>
               <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 p-6 min-h-[180px] flex items-center justify-center text-center text-sm text-slate-400">
-                {activeTab === 'gambar'
-                  ? 'Gambar tanda tangan Anda di area di atas'
-                  : 'Unggah file gambar tanda tangan Anda di sini'}
+                {activeTab === 'gambar' ? (
+                  'Gambar tanda tangan Anda di area di atas'
+                ) : (
+                  <div className="w-full">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".png,.jpg,.jpeg"
+                      className="hidden"
+                      onChange={handleFileSelect}
+                    />
+
+                    {selectedFile ? (
+                      <div className="space-y-3 text-left">
+                        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                          {previewUrl ? (
+                            <img
+                              src={previewUrl}
+                              alt="Preview tanda tangan"
+                              className="h-48 w-full object-contain bg-slate-50"
+                            />
+                          ) : (
+                            <div className="flex h-48 items-center justify-center bg-slate-50 text-sm text-slate-400">
+                              Memuat preview...
+                            </div>
+                          )}
+                          <div className="p-4">
+                            <p className="text-sm font-semibold text-slate-900">{selectedFile.name}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {(selectedFile.size / 1024).toFixed(1)} KB · {selectedFile.type || 'image/*'}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-emerald-300 hover:text-emerald-600"
+                        >
+                          <Upload size={16} />
+                          Pilih file lain
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-3">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm">
+                          <Upload size={20} className="text-slate-500" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-700">Pilih file gambar tanda tangan</p>
+                          <p className="mt-1 text-sm text-slate-400">Format yang didukung: PNG, JPG, JPEG</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                        >
+                          Pilih File
+                        </button>
+                      </div>
+                    )}
+
+                    {uploadError && (
+                      <p className="mt-3 text-sm text-red-600">{uploadError}</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="rounded-[24px] border border-slate-200 bg-white p-4">
                 <p className="text-sm font-semibold text-slate-900 mb-3">Posisi TTD pada Dokumen</p>
                 <div className="flex gap-4 rounded-3xl border border-dashed border-emerald-300 bg-slate-50 p-4 items-center">
-                  <div className="min-w-[80px] h-20 rounded-2xl bg-white border border-slate-200" />
+                  {activeTab === 'upload' && previewUrl && selectedFile ? (
+                    <div className="min-w-[90px] h-20 rounded-2xl border border-slate-200 bg-white p-1">
+                      <img
+                        src={previewUrl}
+                        alt="Preview tanda tangan pada dokumen"
+                        className="h-full w-full rounded-xl object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <div className="min-w-[80px] h-20 rounded-2xl bg-white border border-slate-200" />
+                  )}
                   <p className="text-sm leading-6 text-slate-500">
                     TTD akan ditempatkan di blok tanda tangan bagian kanan bawah dokumen secara otomatis.
                   </p>

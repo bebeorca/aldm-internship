@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { ArrowLeft, Download, Printer } from 'lucide-react';
-import { letterService } from '../../services/api';
+import { letterService, userService } from '../../services/api';
 import type { Letter } from '../../types';
 import Base from '~/components/ui/Base';
 
@@ -33,6 +33,7 @@ export default function LetterDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -46,6 +47,26 @@ export default function LetterDetailPage() {
       })
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (!letter || letter.status !== 'approved') {
+      setSignatureUrl(null);
+      return;
+    }
+
+    userService.getSignature()
+      .then((res) => {
+        const path = res.data?.data?.signature_path;
+        if (path) {
+          setSignatureUrl(`/storage/${path}`);
+        } else {
+          setSignatureUrl(null);
+        }
+      })
+      .catch(() => {
+        setSignatureUrl(null);
+      });
+  }, [letter]);
 
   const handleExportPdf = async () => {
     if (!letter) return;
@@ -207,6 +228,16 @@ export default function LetterDetailPage() {
 
               <div className="text-right text-sm text-slate-700">
                 <p className="font-semibold">Hormat kami,</p>
+                {signatureUrl && (
+                  <div className="mt-4 flex justify-end">
+                    <img
+                      src={signatureUrl}
+                      alt="Tanda tangan direktur"
+                      className="h-16 w-auto object-contain"
+                      onError={() => setSignatureUrl(null)}
+                    />
+                  </div>
+                )}
                 <p className="mt-6 font-semibold">Dr. Hj. Sari Dewi Pratiwi</p>
                 <p className="text-slate-500">Direktur Utama · PT. ALDM</p>
               </div>
