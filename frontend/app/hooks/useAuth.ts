@@ -12,8 +12,17 @@ export function useAuth(): UseAuthReturn {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
     api.get('/user')
-      .then((res) => setUser(res.data.data))
+      .then((res) => {
+        const payload = res?.data?.data ?? res?.data ?? null;
+        setUser(payload);
+      })
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);

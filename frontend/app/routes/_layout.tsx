@@ -1,5 +1,5 @@
 // src/routes/_layout.tsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router';
 import {
   FileText, LayoutDashboard, FilePlus,
@@ -11,7 +11,13 @@ import { usePendingCount } from '../hooks/usePendingCount';
 
 const SUBMENU_ITEMS = [
   { to: '/letters/create/mou', label: 'MoU' },
-  { to: '/letters/create/mou2', label: 'MoU 2' },   // ← ditambah, demo sementara
+  { to: '/letters/create/mou2', label: 'MoU 2' },
+];
+
+// Route yang HANYA boleh diakses oleh direktur
+const DIREKTUR_ONLY_PATHS = [
+  '/settings/signature',
+  '/approval',
 ];
 
 function UserAvatar({ nama }: { nama: string }) {
@@ -30,14 +36,29 @@ function UserAvatar({ nama }: { nama: string }) {
 }
 
 export default function RootLayout() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { user } = useAuth();
+  const navigate  = useNavigate();
+  const location  = useLocation();
+  const { user, loading } = useAuth();
   const pendingCount = usePendingCount();
 
-  // Buat surat submenu open kalau path aktif
   const isCreateActive = location.pathname.startsWith('/letters/create');
   const [createOpen, setCreateOpen] = useState(isCreateActive);
+
+  // ── Role-based route guard ──────────────────────────────────────────────
+  // Redirect non-direktur yang mencoba akses halaman direktur-only.
+  // Merge-safe: tidak menyentuh approval endpoint/API structure.
+  useEffect(() => {
+    if (loading || !user) return;
+
+    const isDirektorOnlyPath = DIREKTUR_ONLY_PATHS.some((p) =>
+      location.pathname.startsWith(p)
+    );
+
+    if (isDirektorOnlyPath && user.role !== 'direktur') {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [user, loading, location.pathname, navigate]);
+  // ───────────────────────────────────────────────────────────────────────
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -100,7 +121,6 @@ export default function RootLayout() {
               />
             </button>
 
-            {/* Submenu */}
             {createOpen && (
               <div className="ml-6 mt-0.5 space-y-0.5 border-l border-gray-100 pl-3">
                 {SUBMENU_ITEMS.map(({ to, label }) => (
@@ -138,7 +158,7 @@ export default function RootLayout() {
             <span>Arsip surat</span>
           </NavLink>
 
-          {/* Approval */}
+          {/* Approval — semua role bisa lihat di sidebar, guard di dalam page */}
           <NavLink
             to="/approval"
             className={({ isActive }) =>
@@ -173,20 +193,22 @@ export default function RootLayout() {
             <span>Sinkron data</span>
           </NavLink>
 
-          {/* Pengaturan */}
-          <NavLink
-            to="/settings/signature"
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                isActive
-                  ? 'bg-emerald-50 text-emerald-700 font-medium'
-                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-              }`
-            }
-          >
-            <Settings size={15} className="shrink-0" />
-            <span>Pengaturan</span>
-          </NavLink>
+          {/* Pengaturan — hanya tampil untuk direktur */}
+          {user?.role === 'direktur' && (
+            <NavLink
+              to="/settings/signature"
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                  isActive
+                    ? 'bg-emerald-50 text-emerald-700 font-medium'
+                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                }`
+              }
+            >
+              <Settings size={15} className="shrink-0" />
+              <span>Pengaturan</span>
+            </NavLink>
+          )}
 
         </nav>
 

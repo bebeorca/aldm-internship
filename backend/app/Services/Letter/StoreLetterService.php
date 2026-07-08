@@ -11,9 +11,9 @@ use Illuminate\Support\Facades\DB;
 class StoreLetterService
 {
     public function __construct(
-        private readonly NomorSuratService     $nomorSuratService,
-        private readonly LetterValidatorService $validator,
-        private readonly DocxGeneratorService  $docxGenerator,
+        private readonly NomorSuratService      $nomorSuratService,
+        private readonly LetterValidatorService  $validator,
+        private readonly DocxGeneratorService   $docxGenerator,
     ) {}
 
     /**
