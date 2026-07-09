@@ -25,6 +25,9 @@ class LetterResource extends JsonResource
                 'id'          => $this->template->id,
                 'nama'        => $this->template->nama,
                 'jenis_surat' => $this->template->jenis_surat,
+                'variabel'    => $this->template->variabel ?? [],
+                'raw_content' => $this->template->raw_content ?? null,
+                'path_docx'   => $this->template->path_docx ?? null,
             ]),
             'creator'      => $this->whenLoaded('creator', fn() => [
                 'id'   => $this->creator->id,

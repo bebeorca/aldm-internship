@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { ArrowLeft, Download, Printer } from 'lucide-react';
 import { letterService, userService } from '../../services/api';
@@ -24,6 +24,28 @@ function formatDate(value?: string) {
   return new Date(value).toLocaleDateString('id-ID', {
     day: '2-digit', month: 'short', year: 'numeric',
   });
+}
+
+/** Simple substitution for {{key}} in raw template text/HTML */
+function substituteVars(html: string, data: Record<string, any> | undefined) {
+  if (!data) return html;
+  let result = html;
+  Object.entries(data).forEach(([k, v]) => {
+    const re = new RegExp(`\\{\\{\\s*${k}\\s*\\}\\}`, 'g');
+    const safe = String(v ?? '');
+    result = result.replace(re, `<span style="color:#065f46;font-weight:600">${safe}</span>`);
+  });
+  return result;
+}
+
+function sanitizeXmlTags(text: string) {
+  let cleaned = text.replace(/<w:[^>]*>/gi, '');
+  cleaned = cleaned.replace(/<[^>]+>/g, '');
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = cleaned;
+  cleaned = textarea.value;
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  return cleaned;
 }
 
 function getDataField(data: Record<string, any> | undefined, ...keys: string[]) {
@@ -237,7 +259,23 @@ export default function LetterDetailPage() {
 
               <div className="mt-4 space-y-4 text-sm text-slate-700">
                 <p>Dengan hormat,</p>
-                <p>{letter.data_surat?.isi || 'Dengan hormat, Bersama nota dinas ini kami sampaikan pengajuan anggaran operasional Kuartal III Tahun 2026 untuk kebutuhan Divisi Operasional sebagaimana terlampir. Besar anggaran yang diajukan adalah sebesar Rp 450.000.000,- (Empat Ratus Lima Puluh Juta Rupiah) untuk periode Juli – September 2026. Mohon kiranya dapat disetujui dan diproses lebih lanjut.'}</p>
+                {/** Render content from template.raw_content (preferred), otherwise use data_surat.isi or fallback text */}
+                {(() => {
+                  const raw = letter.template?.raw_content;
+                  if (raw) {
+                    // If raw contains XML tags, sanitize
+                    const safeRaw = /<w:|<xml|xmlns|<\?xml/i.test(raw) ? sanitizeXmlTags(raw) : raw;
+                    const withVars = substituteVars(safeRaw, letter.data_surat);
+                    // Convert newlines to paragraphs
+                    const paragraphs = withVars.split(/\n+/).map((p) => `<p>${p}</p>`).join('');
+                    return <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: paragraphs }} />;
+                  }
+
+                  const isi = letter.data_surat?.isi;
+                  if (isi) return <p className="whitespace-pre-wrap">{isi}</p>;
+
+                  return <p>Dengan hormat, Bersama nota dinas ini kami sampaikan pengajuan anggaran operasional Kuartal III Tahun 2026 untuk kebutuhan Divisi Operasional sebagaimana terlampir. Besar anggaran yang diajukan adalah sebesar Rp 450.000.000,- (Empat Ratus Lima Puluh Juta Rupiah) untuk periode Juli – September 2026. Mohon kiranya dapat disetujui dan diproses lebih lanjut.</p>;
+                })()}
                 <p>Demikian kami sampaikan, atas perhatian Bapak/Ibu kami ucapkan terima kasih.</p>
               </div>
 

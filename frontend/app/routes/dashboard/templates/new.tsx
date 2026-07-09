@@ -1,7 +1,8 @@
 ﻿import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { Upload, X, FileText, ChevronLeft, Loader2 } from 'lucide-react';
-import { renderAsync } from 'docx-preview';
+// `docx-preview` is browser-only. Import dynamically inside the
+// file reader handler to avoid SSR / dev server resolution errors.
 import { templateService } from '../../../services/api';
 
 const JENIS_OPTIONS = ['BAA', 'SPK', 'MOU', 'KONTRAK'];
@@ -61,6 +62,7 @@ export default function NewTemplatePage() {
 // Render dengan docx-preview â€” preserve layout Word asli termasuk header/logo/table
       if (previewRef.current) {
         previewRef.current.innerHTML = '';
+        const { renderAsync } = await import('docx-preview');
         await renderAsync(arrayBuffer, previewRef.current, undefined, {
           inWrapper: false,
           ignoreWidth: true,
