@@ -28,10 +28,6 @@ services:
       DB_DATABASE: app
       DB_USERNAME: postgres
       DB_PASSWORD: postgres123
-      # URL backend yang bisa diakses dari dalam Docker network
-      # Dipakai oleh ONLYOFFICE untuk fetch file DOCX
-      # APP_URL: http://backend:8000
-      # ONLYOFFICE_DOCUMENT_BASE_URL: "http://backend:8000"
     depends_on:
       - postgres
 
@@ -68,14 +64,6 @@ services:
       SWAGGER_JSON: /docs/openapi.yaml
     volumes:
       - ./docs:/docs
-
-  # ─── ONLYOFFICE Document Server ───────────────────────────────────────────
-  # Rendering DOCX pixel-perfect (header, footer, margin, table, font).
-  # Menggantikan docx-preview / mammoth untuk preview surat di mou2.tsx.
-  # JWT_ENABLED=false untuk development — aktifkan di production.
-  # Akses dari browser: http://localhost:8082
-  # Akses dari Docker network: http://onlyoffice
-
 
 volumes:
   postgres_data:
