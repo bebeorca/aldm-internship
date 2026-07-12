@@ -3,15 +3,13 @@ FROM --platform=linux/amd64 php:8.3-cli
 # Install dependencies system
 RUN apt-get update && apt-get install -y \
     libpq-dev \
-    libzip-dev \
-    zip \
-    unzip \
-    git \
-    && docker-php-ext-install \
-    pdo_pgsql \
-    pgsql \
-    zip
-
+    zip unzip \
+    libreoffice-writer \
+    default-jre-headless \
+    fonts-liberation \
+    fonts-dejavu \
+    && rm -rf /var/lib/apt/lists/*
+    
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 

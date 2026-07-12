@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\TemplateController;
+use App\Http\Controllers\PreviewController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\SyncController;
@@ -15,6 +16,10 @@ Route::get('/templates/{template}', [TemplateController::class, 'show']);
 Route::post('/templates', [TemplateController::class, 'store']);
 
 Route::get('/letters', [LetterController::class, 'index']);
+
+// Generate preview DOCX sementara untuk ditampilkan via ONLYOFFICE
+// Tidak mengubah state, tidak perlu auth
+Route::post('/letters/preview', [PreviewController::class, 'generate']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/letters/{letter}', [LetterController::class, 'show']);

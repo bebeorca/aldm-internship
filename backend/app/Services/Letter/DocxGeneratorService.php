@@ -23,6 +23,12 @@ class DocxGeneratorService
         }
 
         $processor = new TemplateProcessor($templatePath);
+        $processor->setMacroChars('{{', '}}'); // ← tambah ini: pakai {{key}} bukan ${key}
+
+        // Replace semua placeholder sesuai data
+        foreach ($data as $key => $value) {
+    $processor->setValue($key, $value ?? '');
+}
 
         // Replace semua placeholder sesuai data
         foreach ($data as $key => $value) {

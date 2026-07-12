@@ -7,6 +7,7 @@ use App\Http\Requests\StoreLetterRequest;
 use App\Http\Resources\LetterResource;
 use App\Models\Letter;
 use App\Services\Letter\StoreLetterService;
+use App\Services\Letter\PdfConverterService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -264,42 +265,72 @@ class LetterController extends Controller
     }
 
     /**
-     * GET /api/letters/:id/export?format=pdf|docx
-     * Download exported document (only for approved letters).
-     */
-    public function export(Request $request, Letter $letter)
-    {
-        $user = $request->user();
-        if (!$user) {
-            return response()->json(['success' => false, 'message' => 'Unauthorized.'], 401);
-        }
-
-        if (!$letter->canExport()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Surat belum disetujui untuk diekspor.',
-            ], 403);
-        }
-
-        $format = strtolower(trim((string) $request->input('format', 'pdf')));
-        if (!in_array($format, ['pdf', 'docx'], true)) {
-            return response()->json(['success' => false, 'message' => 'Format tidak valid. Gunakan pdf atau docx.'], 422);
-        }
-
-        $filePath = $format === 'pdf' ? $letter->path_pdf : $letter->path_docx;
-        if (!$filePath) {
-            return response()->json(['success' => false, 'message' => 'File tidak tersedia.'], 404);
-        }
-
-        $fullPath = storage_path('app/public/' . ltrim($filePath, '/'));
-        if (!file_exists($fullPath)) {
-            return response()->json(['success' => false, 'message' => 'File tidak ditemukan di server.'], 404);
-        }
-
-        $mime = $format === 'pdf'
-            ? 'application/pdf'
-            : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-
-        return response()->download($fullPath, basename($filePath), ['Content-Type' => $mime]);
+ * GET /api/letters/:id/export?format=pdf|docx
+ */
+public function export(Request $request, Letter $letter)
+{
+    $user = $request->user();
+    if (!$user) {
+        return response()->json(['success' => false, 'message' => 'Unauthorized.'], 401);
     }
+
+    if (!$letter->canExport()) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Surat belum disetujui untuk diekspor.',
+        ], 403);
+    }
+
+    $format = strtolower(trim((string) $request->input('format', 'pdf')));
+    if (!in_array($format, ['pdf', 'docx'], true)) {
+        return response()->json(['success' => false, 'message' => 'Format tidak valid.'], 422);
+    }
+
+    // ─── Export DOCX ────────────────────────────────────────────────────────
+    if ($format === 'docx') {
+        if (!$letter->path_docx) {
+            return response()->json(['success' => false, 'message' => 'File DOCX tidak tersedia.'], 404);
+        }
+        $fullPath = storage_path('app/public/' . ltrim($letter->path_docx, '/'));
+        if (!file_exists($fullPath)) {
+            return response()->json(['success' => false, 'message' => 'File DOCX tidak ditemukan di server.'], 404);
+        }
+        return response()->download($fullPath, ($letter->nomor_surat ?: 'surat') . '.docx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ]);
+    }
+
+    // ─── Export PDF ─────────────────────────────────────────────────────────
+    // Cek apakah PDF sudah pernah dibuat
+    if ($letter->path_pdf) {
+        $existingPdf = storage_path('app/public/' . ltrim($letter->path_pdf, '/'));
+        if (file_exists($existingPdf)) {
+            return response()->download($existingPdf, ($letter->nomor_surat ?: 'surat') . '.pdf', [
+                'Content-Type' => 'application/pdf',
+            ]);
+        }
+    }
+
+    // Belum ada PDF → konversi DOCX ke PDF via LibreOffice
+    if (!$letter->path_docx) {
+        return response()->json(['success' => false, 'message' => 'File DOCX sumber tidak tersedia.'], 404);
+    }
+
+    try {
+        $pdfConverter = app(PdfConverterService::class);
+        $pdfPath      = $pdfConverter->convert($letter->path_docx);
+
+        // Simpan path PDF agar tidak perlu konversi ulang
+        $letter->update(['path_pdf' => $pdfPath]);
+
+        $fullPath = storage_path('app/public/' . $pdfPath);
+        return response()->download($fullPath, ($letter->nomor_surat ?: 'surat') . '.pdf', [
+            'Content-Type' => 'application/pdf',
+        ]);
+
+    } catch (\RuntimeException $e) {
+        Log::error('PDF export failed', ['letter_id' => $letter->id, 'message' => $e->getMessage()]);
+        return response()->json(['success' => false, 'message' => 'Gagal membuat PDF: ' . $e->getMessage()], 500);
+    }
+}
 }
