@@ -22,29 +22,33 @@ export function useDashboardStats(): UseDashboardStatsReturn {
     total: 0, pending: 0, approved: 0, rejected: 0,
   });
   const [recentLetters, setRecentLetters] = useState<Letter[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [templates, setTemplates]         = useState<Template[]>([]);
+  const [loading, setLoading]             = useState(true);
+  const [error, setError]                 = useState('');
 
   useEffect(() => {
-  templateService.getAll()
-    .then((templatesRes) => {
-      // sementara letters kosong
-      const letters: Letter[] = [];
+    // Fetch semua data paralel
+    Promise.all([
+      letterService.getAll(),           // semua surat
+      templateService.getAll(),         // semua template
+    ])
+      .then(([lettersRes, templatesRes]) => {
+        const letters: Letter[] = lettersRes.data.data ?? [];
 
-      setStats({
-        total: 0,
-        pending: 0,
-        approved: 0,
-        rejected: 0,
-      });
+        // Hitung stats dari data yang ada
+        const total    = letters.length;
+        const pending  = letters.filter((l) => l.status === 'pending_approval').length;
+        const approved = letters.filter((l) => l.status === 'approved').length;
+        const rejected = letters.filter((l) => l.status === 'rejected').length;
 
-      setRecentLetters([]);
-      setTemplates(templatesRes.data.data);
-    })
-    .catch(() => setError('Gagal memuat data dashboard.'))
-    .finally(() => setLoading(false));
-}, []);
+        setStats({ total, pending, approved, rejected });
+        // 5 surat terbaru untuk tabel recent
+        setRecentLetters(letters.slice(0, 5));
+        setTemplates(templatesRes.data.data ?? []);
+      })
+      .catch(() => setError('Gagal memuat data dashboard.'))
+      .finally(() => setLoading(false));
+  }, []);
 
   return { stats, recentLetters, templates, loading, error };
 }

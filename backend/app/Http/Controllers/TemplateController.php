@@ -114,4 +114,51 @@ class TemplateController extends Controller
 
         return [$variabel, $rawContent];
     }
+    /**
+ * POST /api/templates/preview-upload
+ * Upload DOCX sementara → konversi ke PDF via LibreOffice → return PDF URL + variabel.
+ * Dipakai oleh new.tsx untuk preview sebelum template disimpan ke DB.
+ */
+public function previewUpload(Request $request): JsonResponse
+{
+    $request->validate([
+        'file_docx' => 'required|file|mimes:docx|max:10240',
+    ]);
+
+    // Simpan ke folder temp
+    $pathDocx     = $request->file('file_docx')->store('templates/temp', 'public');
+    $absolutePath = Storage::disk('public')->path($pathDocx);
+
+    // Extract variabel dari XML di dalam DOCX (ZipArchive inline)
+    $variabel = [];
+    $zip = new \ZipArchive();
+    if ($zip->open($absolutePath) === true) {
+        $xml = $zip->getFromName('word/document.xml');
+        $zip->close();
+        if ($xml !== false) {
+            preg_match_all('/<w:t[^>]*>(.*?)<\/w:t>/s', $xml, $matches);
+            $raw = html_entity_decode(implode('', $matches[1]), ENT_QUOTES | ENT_XML1);
+            preg_match_all('/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/', $raw, $varMatches);
+            $variabel = array_values(array_unique($varMatches[1]));
+        }
+    }
+
+    // Konversi DOCX → PDF via LibreOffice
+    $pdfUrl = null;
+    try {
+        $pdfConverter = app(\App\Services\Letter\PdfConverterService::class);
+        $pdfPath      = $pdfConverter->convert($pathDocx);
+        $pdfUrl       = '/storage/' . $pdfPath;
+    } catch (\RuntimeException $e) {
+        \Log::warning('Preview upload PDF conversion failed', ['message' => $e->getMessage()]);
+    }
+
+    return response()->json([
+        'success' => true,
+        'data' => [
+            'pdf_url'  => $pdfUrl,
+            'variabel' => $variabel,
+        ],
+    ]);
+}
 }

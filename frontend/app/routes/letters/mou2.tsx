@@ -2,7 +2,7 @@
 import { useNavigate, useSearchParams } from 'react-router';
 import {
   ChevronLeft, Loader2, FileText, Upload, Tag,
-  CheckCircle2, AlertCircle, Check, Bold, Italic, Underline, List, X,
+  CheckCircle2, AlertCircle, Check, X,
 } from 'lucide-react';
 import { letterService, templateService } from '../../services/api';
 import type { Template } from '../../types';
@@ -13,14 +13,42 @@ type Step = 'template' | 'form';
 
 const APPROVAL_FLOW = ['Admin TU', 'Kepala Dept.', 'Direktur'];
 
-/** Parse SEMUA baris CSV — return headers + array of rows */
+// ─── CSV Parser RFC 4180 — handle koma di dalam tanda kutip ───────────────────
+// Bug 3 fix: "Dsn. Lembung, Kec. Deket, Kab. Lamongan" tidak lagi dipecah
+function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current   = '';
+  let inQuotes  = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else if (ch === '\r') {
+      // skip CR
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
 function parseCsvAllRows(text: string): { headers: string[]; rows: Record<string, string>[] } {
   const lines = text.trim().split('\n').filter(Boolean);
   if (lines.length < 2) return { headers: [], rows: [] };
 
-  const headers = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
-  const rows = lines.slice(1).map((line) => {
-    const values = line.split(',').map((v) => v.trim().replace(/^"|"$/g, ''));
+  const headers = parseCsvLine(lines[0]);
+  const rows    = lines.slice(1).map((line) => {
+    const values = parseCsvLine(line);
     const row: Record<string, string> = {};
     headers.forEach((h, i) => { row[h] = values[i] ?? ''; });
     return row;
@@ -34,42 +62,36 @@ function formatLabel(key: string): string {
 }
 
 export default function MouTwoPage() {
-  const navigate       = useNavigate();
-  const [searchParams] = useSearchParams();
-  const csvRef         = useRef<HTMLInputElement>(null);
-  const attachRef      = useRef<HTMLInputElement>(null);
-  const debounceRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navigate        = useNavigate();
+  const [searchParams]  = useSearchParams();
+  const csvRef          = useRef<HTMLInputElement>(null);
+  const debounceRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [step, setStep] = useState<Step>('template');
 
-  // Template list
-  const [templates, setTemplates]     = useState<Template[]>([]);
-  const [loadingList, setLoadingList] = useState(true);
-  const [listError, setListError]     = useState('');
+  const [templates, setTemplates]       = useState<Template[]>([]);
+  const [loadingList, setLoadingList]   = useState(true);
+  const [listError, setListError]       = useState('');
 
-  // Selected template + form
-  const [selected, setSelected]     = useState<Template | null>(null);
-  const [formData, setFormData]     = useState<Record<string, string>>({});
-  const [attachment, setAttachment] = useState<File | null>(null);
+  const [selected, setSelected]         = useState<Template | null>(null);
+  const [formData, setFormData]         = useState<Record<string, string>>({});
 
-  // PDF preview state
-  const [pdfUrl, setPdfUrl]               = useState<string | null>(null);
-  const [loadingPreview, setLoadingPreview] = useState(false);
-  const [previewError, setPreviewError]   = useState('');
+  // PDF preview
+  const [pdfUrl, setPdfUrl]                   = useState<string | null>(null);
+  const [loadingPreview, setLoadingPreview]   = useState(false);
+  const [previewError, setPreviewError]       = useState('');
 
-  // CSV row picker state
-  const [csvRows, setCsvRows]           = useState<Record<string, string>[]>([]);
-  const [csvHeaders, setCsvHeaders]     = useState<string[]>([]);
+  // CSV
+  const [csvRows, setCsvRows]             = useState<Record<string, string>[]>([]);
+  const [csvHeaders, setCsvHeaders]       = useState<string[]>([]);
   const [showCsvPicker, setShowCsvPicker] = useState(false);
-  const [csvFileName, setCsvFileName]   = useState('');
-  const [csvLoading, setCsvLoading]     = useState(false);
-  const [csvMsg, setCsvMsg]             = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [csvFileName, setCsvFileName]     = useState('');
+  const [csvLoading, setCsvLoading]       = useState(false);
+  const [csvMsg, setCsvMsg]               = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Submit state
-  const [submitting, setSubmitting]   = useState(false);
-  const [submitError, setSubmitError] = useState('');
+  const [submitting, setSubmitting]       = useState(false);
+  const [submitError, setSubmitError]     = useState('');
 
-  // Load template list
   useEffect(() => {
     templateService.getAll()
       .then((res) => setTemplates(res.data.data ?? []))
@@ -77,7 +99,6 @@ export default function MouTwoPage() {
       .finally(() => setLoadingList(false));
   }, []);
 
-  // Auto-select dari URL ?template_id=X
   useEffect(() => {
     const tid = searchParams.get('template_id');
     if (!tid) return;
@@ -86,25 +107,22 @@ export default function MouTwoPage() {
       .catch(() => setListError('Template tidak ditemukan.'));
   }, []);
 
-  // Debounce preview — generate PDF setiap kali selected/formData berubah
+  // Debounce preview — generate PDF setiap formData berubah
   useEffect(() => {
     if (!selected) return;
-
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     debounceRef.current = setTimeout(async () => {
       setLoadingPreview(true);
       setPreviewError('');
-
       try {
         const res = await letterService.generatePreview({
           template_id: selected.id,
           data_surat: formData,
         });
-
         if (res.data?.success) {
-          // Tambah key sebagai query param agar iframe reload dokumen baru
-          setPdfUrl(res.data.data.pdf_url + '?v=' + res.data.data.key);
+          // Bug 1 fix: tambah #toolbar=0&navpanes=0 agar sidebar PDF viewer tidak muncul
+          setPdfUrl(res.data.data.pdf_url + '?v=' + res.data.data.key + '#toolbar=0&navpanes=0');
         }
       } catch (err: any) {
         setPreviewError(err?.response?.data?.message ?? 'Gagal membuat pratinjau.');
@@ -135,7 +153,6 @@ export default function MouTwoPage() {
     setFormData((prev) => ({ ...prev, [key]: val }));
   };
 
-  // CSV: parse semua baris, tampilkan row picker
   const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -149,32 +166,33 @@ export default function MouTwoPage() {
       const text = await file.text();
       const { headers, rows } = parseCsvAllRows(text);
 
-      if (rows.length === 0) throw new Error('CSV tidak memiliki data. Minimal 1 baris header + 1 baris data.');
+      if (rows.length === 0) {
+        throw new Error('CSV tidak memiliki data. Minimal 1 baris header + 1 baris data.');
+      }
 
       setCsvHeaders(headers);
       setCsvRows(rows);
       setShowCsvPicker(true);
-      setCsvMsg({ type: 'success', text: `${rows.length} baris data ditemukan. Pilih nomor baris di bawah.` });
+      setCsvMsg({ type: 'success', text: `${rows.length} baris ditemukan. Pilih nomor data di bawah.` });
     } catch (err: any) {
-      setCsvMsg({ type: 'error', text: err.message || 'Gagal membaca file CSV.' });
+      setCsvMsg({ type: 'error', text: err.message || 'Gagal membaca CSV.' });
     } finally {
       setCsvLoading(false);
       if (csvRef.current) csvRef.current.value = '';
     }
   };
 
-  // Pilih baris CSV tertentu → isi form
-  const handleSelectCsvRow = (rowIndex: number) => {
-    const row = csvRows[rowIndex];
+  const handleSelectCsvRow = (index: number) => {
+    const row = csvRows[index];
     if (!row) return;
 
-    const matchedKeys: string[] = [];
+    const matched: string[] = [];
     setFormData((prev) => {
       const updated = { ...prev };
       Object.keys(updated).forEach((k) => {
         if (row[k] !== undefined) {
           updated[k] = row[k];
-          matchedKeys.push(k);
+          matched.push(k);
         }
       });
       return updated;
@@ -182,24 +200,20 @@ export default function MouTwoPage() {
 
     setCsvMsg({
       type: 'success',
-      text: `Baris ${rowIndex + 1} berhasil diisi: ${matchedKeys.map(formatLabel).join(', ')}.`,
+      text: `Baris ${index + 1} berhasil diisi: ${matched.map(formatLabel).join(', ')}.`,
     });
     setShowCsvPicker(false);
   };
 
-  // Submit surat
   const handleSubmit = async () => {
     if (!selected) return;
-
     const empty = selected.variabel.filter((k) => !formData[k]?.trim());
     if (empty.length > 0) {
       setSubmitError(`Field belum diisi: ${empty.map(formatLabel).join(', ')}`);
       return;
     }
-
     setSubmitting(true);
     setSubmitError('');
-
     try {
       await letterService.create({ template_id: selected.id, data_surat: formData });
       navigate('/letters');
@@ -214,7 +228,7 @@ export default function MouTwoPage() {
 
   const nomorSurat = `ND/ALDM/VI/2026/${String(selected?.id ?? 0).padStart(3, '0')}`;
 
-  // ====== STEP 1: PILIH TEMPLATE ======
+  // ====== STEP 1 ======
   if (step === 'template') {
     return (
       <PageShell step={1}>
@@ -273,7 +287,7 @@ export default function MouTwoPage() {
     );
   }
 
-  // ====== STEP 2: ISI KONTEN ======
+  // ====== STEP 2 — Bug 3: grid 2-col (50/50), hapus Isi Surat + Lampiran ======
   return (
     <PageShell step={2}>
       <button
@@ -283,10 +297,11 @@ export default function MouTwoPage() {
         <ChevronLeft size={16} /> Ganti template
       </button>
 
-      <div className="grid grid-cols-3 gap-6">
+      {/* Bug 3: grid-cols-2 → form kiri 50%, pratinjau kanan 50% */}
+      <div className="grid grid-cols-2 gap-6">
 
         {/* ─── Kiri: Form ─── */}
-        <div className="col-span-2 bg-white border border-gray-200 rounded-xl">
+        <div className="bg-white border border-gray-200 rounded-xl">
           <div className="px-6 py-4 border-b border-gray-100">
             <h2 className="text-sm font-semibold text-gray-800">Informasi Surat</h2>
           </div>
@@ -303,9 +318,9 @@ export default function MouTwoPage() {
               </div>
             </div>
 
-            {/* Field dinamis dari template.variabel */}
+            {/* Field dinamis dari template.variabel SAJA */}
             {selected?.variabel.length === 0 && (
-              <p className="text-sm text-gray-400 italic">Template ini tidak memiliki variabel isian.</p>
+              <p className="text-sm text-gray-400 italic">Template tidak memiliki variabel isian.</p>
             )}
             {selected?.variabel.map((key) => (
               <div key={key}>
@@ -320,7 +335,7 @@ export default function MouTwoPage() {
               </div>
             ))}
 
-            {/* Tanggal + Jenis Surat */}
+            {/* Tanggal + Jenis */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Tanggal Surat</label>
@@ -332,40 +347,7 @@ export default function MouTwoPage() {
               </div>
             </div>
 
-            {/* Isi Surat */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Isi Surat</label>
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <div className="flex items-center gap-3 px-3 py-2 bg-gray-50 border-b border-gray-200 text-gray-400">
-                  <Bold size={14} /><Italic size={14} /><Underline size={14} />
-                  <span className="w-px h-4 bg-gray-200" />
-                  <span className="text-xs font-semibold">H1</span>
-                  <span className="text-xs font-semibold">H2</span>
-                  <span className="w-px h-4 bg-gray-200" />
-                  <List size={14} />
-                </div>
-                <textarea rows={5} placeholder={'Dengan hormat,\n\nBersama surat ini kami sampaikan...'} className="w-full px-3 py-3 text-sm focus:outline-none text-gray-800 bg-white placeholder:text-gray-300 resize-none" />
-              </div>
-            </div>
-
-            {/* Lampiran */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Lampiran</label>
-              <input ref={attachRef} type="file" accept=".pdf,.docx,.jpg,.jpeg,.png" className="hidden" onChange={(e) => setAttachment(e.target.files?.[0] ?? null)} />
-              {attachment ? (
-                <div className="flex items-center gap-3 px-4 py-3 border border-emerald-200 bg-emerald-50 rounded-xl">
-                  <FileText size={16} className="text-emerald-600 shrink-0" />
-                  <span className="text-sm text-emerald-700 flex-1 truncate">{attachment.name}</span>
-                  <button onClick={() => setAttachment(null)} className="text-xs text-emerald-500 hover:text-emerald-700">Hapus</button>
-                </div>
-              ) : (
-                <button onClick={() => attachRef.current?.click()} className="w-full flex flex-col items-center gap-2 px-4 py-6 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 hover:border-emerald-300 hover:text-emerald-500 transition-colors">
-                  <Upload size={20} />
-                  <span className="text-xs">Seret file ke sini atau klik untuk unggah</span>
-                  <span className="text-[10px] text-gray-300">PDF, DOCX, JPG — Maks. 10MB</span>
-                </button>
-              )}
-            </div>
+            {/* Bug 3: Isi Surat dan Lampiran DIHAPUS — sudah ada di template DOCX */}
 
             {/* Alur Persetujuan */}
             <div>
@@ -390,12 +372,11 @@ export default function MouTwoPage() {
               <ChevronLeft size={14} /> Kembali
             </button>
             <div className="flex items-center gap-3">
-              {submitError && <p className="text-xs text-red-500 max-w-[200px] text-right">{submitError}</p>}
-              <button className="px-4 py-2 text-sm border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors shrink-0">Simpan Draft</button>
+              {submitError && <p className="text-xs text-red-500 max-w-[180px] text-right">{submitError}</p>}
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm bg-emerald-700 text-white rounded-xl hover:bg-emerald-800 disabled:opacity-50 transition-colors shrink-0"
+                className="flex items-center gap-1.5 px-4 py-2 text-sm bg-emerald-700 text-white rounded-xl hover:bg-emerald-800 disabled:opacity-50 transition-colors"
               >
                 {submitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                 {submitting ? 'Mengirim...' : 'Kirim untuk Disetujui'}
@@ -405,8 +386,8 @@ export default function MouTwoPage() {
         </div>
 
         {/* ─── Kanan: Pratinjau PDF + Import CSV ─── */}
-        <div>
-          {/* Header panel */}
+        <div className="flex flex-col">
+          {/* Header pratinjau */}
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Pratinjau Surat</p>
             <div>
@@ -422,12 +403,12 @@ export default function MouTwoPage() {
             </div>
           </div>
 
-          {/* CSV filename */}
           {csvFileName && <p className="text-xs text-gray-400 mb-2 truncate">File: {csvFileName}</p>}
 
-          {/* CSV status message */}
           {csvMsg && (
-            <div className={`flex items-start gap-2 text-xs px-3 py-2 rounded-lg mb-2 ${csvMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-600 border border-red-100'}`}>
+            <div className={`flex items-start gap-2 text-xs px-3 py-2 rounded-lg mb-2 ${
+              csvMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-600 border border-red-100'
+            }`}>
               {csvMsg.type === 'success' ? <CheckCircle2 size={13} className="shrink-0 mt-0.5" /> : <AlertCircle size={13} className="shrink-0 mt-0.5" />}
               <span>{csvMsg.text}</span>
             </div>
@@ -437,25 +418,21 @@ export default function MouTwoPage() {
           {showCsvPicker && csvRows.length > 0 && (
             <div className="mb-3 border border-emerald-200 rounded-xl overflow-hidden shadow-sm">
               <div className="flex items-center justify-between px-3 py-2 bg-emerald-50 border-b border-emerald-100">
-                <p className="text-xs font-semibold text-emerald-700">
-                  Pilih nomor baris data ({csvRows.length} baris)
-                </p>
+                <p className="text-xs font-semibold text-emerald-700">Pilih nomor data ({csvRows.length} baris)</p>
                 <button onClick={() => setShowCsvPicker(false)}>
                   <X size={13} className="text-emerald-400 hover:text-emerald-700" />
                 </button>
               </div>
-              <div className="max-h-48 overflow-y-auto divide-y divide-gray-100 bg-white">
-                {csvRows.map((row, index) => (
+              <div className="max-h-44 overflow-y-auto divide-y divide-gray-100 bg-white">
+                {csvRows.map((row, idx) => (
                   <button
-                    key={index}
-                    onClick={() => handleSelectCsvRow(index)}
+                    key={idx}
+                    onClick={() => handleSelectCsvRow(idx)}
                     className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-emerald-50 text-left transition-colors"
                   >
-                    {/* Nomor baris */}
                     <span className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold flex items-center justify-center shrink-0">
-                      {index + 1}
+                      {idx + 1}
                     </span>
-                    {/* Preview 3 kolom pertama */}
                     <span className="text-xs text-gray-600 truncate flex-1">
                       {csvHeaders.slice(0, 3).map((h) => row[h] || '—').join(' · ')}
                     </span>
@@ -465,48 +442,40 @@ export default function MouTwoPage() {
             </div>
           )}
 
-          {/* ─── Pratinjau PDF via iframe ─── */}
-          <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white" style={{ minHeight: '620px' }}>
+          {/* PDF Iframe — Bug 1: #toolbar=0&navpanes=0 sudah di-set di setPdfUrl */}
+          <div className="flex-1 border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white" style={{ minHeight: '600px' }}>
             {loadingPreview && (
               <div className="flex flex-col items-center justify-center h-full py-20 text-gray-300 gap-3">
                 <Loader2 size={22} className="animate-spin" />
                 <p className="text-xs text-gray-400">Membuat pratinjau...</p>
-                <p className="text-[10px] text-gray-300">DOCX → PDF via LibreOffice</p>
               </div>
             )}
-
             {!loadingPreview && previewError && (
               <div className="p-5">
                 <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
                   <AlertCircle size={14} className="shrink-0 mt-0.5" />
                   <div>
                     <p className="font-medium mb-0.5">Pratinjau tidak tersedia</p>
-                    <p className="text-amber-600">{previewError}</p>
+                    <p>{previewError}</p>
                   </div>
                 </div>
               </div>
             )}
-
             {!loadingPreview && !previewError && !pdfUrl && (
-              <div className="flex flex-col items-center justify-center py-20 text-gray-300">
+              <div className="flex flex-col items-center justify-center h-full py-20 text-gray-300">
                 <FileText size={28} className="mb-2" />
-                <p className="text-xs italic text-center px-4">
-                  Pratinjau PDF akan muncul setelah template dipilih
-                </p>
+                <p className="text-xs italic text-center px-4">Pratinjau PDF muncul setelah template dipilih</p>
               </div>
             )}
-
-            {/* PDF iframe — browser render native, fidelitas 100% */}
             {pdfUrl && !loadingPreview && (
               <iframe
-                key={pdfUrl}           /* key agar iframe reload saat URL berubah */
+                key={pdfUrl}
                 src={pdfUrl}
                 title="Pratinjau Surat"
-                style={{ width: '100%', height: '620px', border: 'none', display: 'block' }}
+                style={{ width: '100%', height: '600px', border: 'none', display: 'block' }}
               />
             )}
           </div>
-
           <p className="text-[10px] text-gray-400 mt-2 text-center">
             PDF dirender via LibreOffice · Update 0.9 detik setelah input berubah
           </p>
@@ -517,7 +486,6 @@ export default function MouTwoPage() {
   );
 }
 
-// ─── Shell ───
 function PageShell({ step, children }: { step: 1 | 2 | 3; children: React.ReactNode }) {
   const navigate = useNavigate();
   const steps = [

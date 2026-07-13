@@ -1,87 +1,49 @@
 ﻿import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { Upload, X, FileText, ChevronLeft, Loader2 } from 'lucide-react';
-import { renderAsync } from 'docx-preview';
-import { templateService } from '../../../services/api';
+import api, { templateService } from '../../../services/api';
 
 const JENIS_OPTIONS = ['BAA', 'SPK', 'MOU', 'KONTRAK'];
 
-/**
- * Validasi apakah konten tampak mengandung XML tags yang tidak terproses
- */
-function hasUnprocessedXmlTags(html: string): boolean {
-  return /<w:|<\/w:|<xml|xmlns|<\?xml/i.test(html);
-}
-
-/**
- * Sanitasi HTML/XML untuk menghilangkan tag Word XML yang tertinggal
- */
-function sanitizeXmlTags(text: string): string {
-  // Hapus semua XML/HTML tags
-  let cleaned = text.replace(/<[^>]+>/g, '');
-  
-  // Decode HTML entities
-  const textarea = document.createElement('textarea');
-  textarea.innerHTML = cleaned;
-  cleaned = textarea.value;
-  
-  // Hapus extra whitespace
-  cleaned = cleaned.replace(/\s+/g, ' ').trim();
-  
-  return cleaned;
-}
-
 export default function NewTemplatePage() {
   const navigate = useNavigate();
-  const fileRef    = useRef<HTMLInputElement>(null);
-  const previewRef = useRef<HTMLDivElement>(null);
+  const fileRef  = useRef<HTMLInputElement>(null);
 
   const [nama, setNama]             = useState('');
   const [jenisSurat, setJenisSurat] = useState('');
   const [file, setFile]             = useState<File | null>(null);
   const [docxVars, setDocxVars]     = useState<string[]>([]);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [reading, setReading]       = useState(false);
-  const [hasPreview, setHasPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]           = useState('');
 
+  // Bug 4: upload ke backend → LibreOffice convert → PDF URL + variabel
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
 
     setFile(f);
     setDocxVars([]);
-    setHasPreview(false);
+    setPdfPreviewUrl(null);
     setReading(true);
     setError('');
 
     try {
-      const arrayBuffer = await f.arrayBuffer();
+      const form = new FormData();
+      form.append('file_docx', f);
 
-// Render dengan docx-preview â€” preserve layout Word asli termasuk header/logo/table
-      if (previewRef.current) {
-        previewRef.current.innerHTML = '';
-        await renderAsync(arrayBuffer, previewRef.current, undefined, {
-          inWrapper: false,
-          ignoreWidth: true,
-          ignoreHeight: true,
-          renderHeaders: true,
-          renderFooters: true,
-          renderFootnotes: true,
-          breakPages: false,
-          ignoreFonts: false,
-        });
-        setHasPreview(true);
+      const res = await api.post('/templates/preview-upload', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
 
-        // Extract variabel dari text content yang sudah dirender â€” lebih akurat dari mammoth
-        const renderedText = previewRef.current.textContent || '';
-        const matches = renderedText.match(/\{\{(\w+)\}\}/g) ?? [];
-        const vars = [...new Set(matches.map((m) => m.replace(/\{\{|\}\}/g, '')))];
-        setDocxVars(vars);
+      if (res.data?.success) {
+        setDocxVars(res.data.data.variabel ?? []);
+        if (res.data.data.pdf_url) {
+          setPdfPreviewUrl(res.data.data.pdf_url + '?v=' + Date.now() + '#toolbar=0&navpanes=0');
+        }
       }
-    } catch (err) {
-      console.error('docx-preview error:', err);
-
+    } catch {
       setError('Gagal membaca file DOCX. Pastikan file tidak corrupt.');
       setFile(null);
       if (fileRef.current) fileRef.current.value = '';
@@ -90,11 +52,10 @@ export default function NewTemplatePage() {
     }
   };
 
-  const handleRemoveFile = () => {
+  const handleRemove = () => {
     setFile(null);
     setDocxVars([]);
-    setHasPreview(false);
-    if (previewRef.current) previewRef.current.innerHTML = '';
+    setPdfPreviewUrl(null);
     if (fileRef.current) fileRef.current.value = '';
   };
 
@@ -124,63 +85,36 @@ export default function NewTemplatePage() {
   return (
     <div className="flex items-start bg-gray-50 min-h-full">
 
-      {/* â”€â”€â”€ Kiri: Form â”€â”€â”€ */}
+      {/* ─── Kiri: Form ─── */}
       <div className="flex-1 p-8">
-        <button
-          onClick={() => navigate('/dashboard/templates')}
-          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 mb-6 transition-colors"
-        >
+        <button onClick={() => navigate('/dashboard/templates')} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 mb-6 transition-colors">
           <ChevronLeft size={13} /> Kembali ke Template
         </button>
 
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-xl font-semibold text-gray-800">Tambah Template</h1>
-            <p className="text-xs text-gray-400 mt-1">Dashboard â€º Template â€º Tambah Template</p>
+            <p className="text-xs text-gray-400 mt-1">Dashboard › Template › Tambah Template</p>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => navigate('/dashboard/templates')}
-              className="px-4 py-2 text-sm border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
-            >
-              Batal
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={submitting || reading}
-              className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-60 transition-colors"
-            >
+            <button onClick={() => navigate('/dashboard/templates')} className="px-4 py-2 text-sm border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50">Batal</button>
+            <button onClick={handleSubmit} disabled={submitting || reading} className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-60">
               {submitting ? 'Menyimpan...' : 'Simpan Template'}
             </button>
           </div>
         </div>
 
-        {error && (
-          <div className="mb-5 text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
-            {error}
-          </div>
-        )}
+        {error && <div className="mb-5 text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">{error}</div>}
 
         <div className="max-w-lg space-y-5">
-
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Nama Template</label>
-            <input
-              type="text"
-              value={nama}
-              onChange={(e) => setNama(e.target.value)}
-              placeholder="cth: MOU Peserta Training"
-              className="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-300"
-            />
+            <input type="text" value={nama} onChange={(e) => setNama(e.target.value)} placeholder="cth: MOU Peserta Training" className="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-300" />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Kategori</label>
-            <select
-              value={jenisSurat}
-              onChange={(e) => setJenisSurat(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-300"
-            >
+            <select value={jenisSurat} onChange={(e) => setJenisSurat(e.target.value)} className="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-300">
               <option value="">Pilih kategori...</option>
               {JENIS_OPTIONS.map((j) => <option key={j} value={j}>{j}</option>)}
             </select>
@@ -191,80 +125,68 @@ export default function NewTemplatePage() {
               Upload File DOCX <span className="text-red-500">*</span>
             </label>
             <p className="text-xs text-gray-400 mb-2">
-              Gunakan{' '}
-              <code className="bg-gray-100 px-1 rounded font-mono text-[11px]">{'{{nama_variabel}}'}</code>
-              {' '}sebagai placeholder di dalam file Word.
+              Gunakan <code className="bg-gray-100 px-1 rounded font-mono text-[11px]">{'{{nama_variabel}}'}</code> sebagai placeholder.
             </p>
             <input ref={fileRef} type="file" accept=".docx" onChange={handleFileChange} className="hidden" />
             {file ? (
               <div className="flex items-center gap-3 px-4 py-3 border border-emerald-200 bg-emerald-50 rounded-xl">
-                {reading
-                  ? <Loader2 size={16} className="text-emerald-500 animate-spin shrink-0" />
-                  : <FileText size={16} className="text-emerald-600 shrink-0" />
-                }
+                {reading ? <Loader2 size={16} className="text-emerald-500 animate-spin shrink-0" /> : <FileText size={16} className="text-emerald-600 shrink-0" />}
                 <span className="text-sm text-emerald-700 flex-1 truncate">{file.name}</span>
-                <button onClick={handleRemoveFile}>
-                  <X size={14} className="text-emerald-500 hover:text-emerald-700" />
-                </button>
+                <button onClick={handleRemove}><X size={14} className="text-emerald-500 hover:text-emerald-700" /></button>
               </div>
             ) : (
-              <button
-                onClick={() => fileRef.current?.click()}
-                className="w-full flex flex-col items-center gap-2 px-4 py-8 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 hover:border-emerald-300 hover:text-emerald-500 transition-colors"
-              >
+              <button onClick={() => fileRef.current?.click()} className="w-full flex flex-col items-center gap-2 px-4 py-8 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 hover:border-emerald-300 hover:text-emerald-500 transition-colors">
                 <Upload size={22} />
                 <span className="text-xs">Klik untuk upload file .docx</span>
               </button>
             )}
           </div>
 
+          {reading && (
+            <div className="flex items-center gap-2 text-xs text-gray-500 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+              <Loader2 size={13} className="animate-spin shrink-0 text-blue-500" />
+              Mengkonversi DOCX → PDF via LibreOffice...
+            </div>
+          )}
+
           {docxVars.length > 0 && (
             <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
-              <p className="text-xs font-medium text-emerald-700 mb-2">
-                {docxVars.length} variabel terdeteksi dari file:
-              </p>
+              <p className="text-xs font-medium text-emerald-700 mb-2">{docxVars.length} variabel terdeteksi:</p>
               <div className="flex flex-wrap gap-1.5">
                 {docxVars.map((v) => (
-                  <span key={v} className="text-[11px] bg-white text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-mono">
-                    {`{{${v}}}`}
-                  </span>
+                  <span key={v} className="text-[11px] bg-white text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-mono">{`{{${v}}}`}</span>
                 ))}
               </div>
             </div>
           )}
-
         </div>
       </div>
 
-      {/* â”€â”€â”€ Kanan: Pratinjau â”€â”€â”€ */}
+      {/* ─── Kanan: Pratinjau LibreOffice PDF ─── */}
       <div className="w-96 sticky top-0 h-screen overflow-y-auto border-l border-gray-200 bg-white shrink-0">
-        <div className="p-6">
+        <div className="p-6 h-full flex flex-col">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1">Pratinjau</p>
-          <p className="text-[11px] text-gray-400 mb-4">
-            Render layout asli Word â€” header, logo, tabel, dan spacing dipertahankan.
-          </p>
+          <p className="text-[11px] text-gray-400 mb-4">Render via LibreOffice — layout persis seperti Word.</p>
 
-          <div className="border border-gray-200 rounded-xl overflow-hidden min-h-[200px] relative">
+          <div className="flex-1 border border-gray-200 rounded-xl overflow-hidden bg-gray-50" style={{ minHeight: '500px' }}>
             {reading && (
-              <div className="absolute inset-0 bg-white flex items-center justify-center gap-2 text-gray-300 z-10">
-                <Loader2 size={16} className="animate-spin" />
-                <span className="text-xs">Memuat pratinjau...</span>
+              <div className="flex flex-col items-center justify-center h-full gap-2 text-gray-300">
+                <Loader2 size={18} className="animate-spin" />
+                <p className="text-xs">Memproses file...</p>
               </div>
             )}
-
-            {/* Container untuk docx-preview â€” selalu ada di DOM agar ref valid */}
-            <div
-              ref={previewRef}
-              className="docx-preview-container p-2"
-              style={{ display: hasPreview ? 'block' : 'none', fontSize: '10px' }}
-            />
-
-            {!reading && !hasPreview && (
-              <div className="flex flex-col items-center justify-center py-16 text-gray-300">
+            {!reading && pdfPreviewUrl && (
+              <iframe
+                key={pdfPreviewUrl}
+                src={pdfPreviewUrl}
+                title="Preview Template"
+                style={{ width: '100%', height: '100%', minHeight: '500px', border: 'none', display: 'block' }}
+              />
+            )}
+            {!reading && !pdfPreviewUrl && (
+              <div className="flex flex-col items-center justify-center h-full py-16 text-gray-300">
                 <FileText size={28} className="mb-2" />
-                <p className="text-xs italic text-center px-4">
-                  Upload file .docx untuk melihat pratinjau
-                </p>
+                <p className="text-xs italic text-center px-4">Upload file .docx untuk melihat pratinjau</p>
               </div>
             )}
           </div>

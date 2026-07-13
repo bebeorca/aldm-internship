@@ -2,24 +2,26 @@
 
 use App\Http\Controllers\TemplateController;
 use App\Http\Controllers\PreviewController;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\SyncController;
-use App\Http\Controllers\AuthController;
 use App\Http\Controllers\LetterController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\SyncController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/register', [AuthController::class, 'register']);
 
 Route::get('/templates', [TemplateController::class, 'index']);
 Route::get('/templates/{template}', [TemplateController::class, 'show']);
 Route::post('/templates', [TemplateController::class, 'store']);
+// Bug 4: preview template sebelum disimpan (LibreOffice, tanpa auth)
+Route::post('/templates/preview-upload', [TemplateController::class, 'previewUpload']);
 
 Route::get('/letters', [LetterController::class, 'index']);
-
-// Generate preview DOCX sementara untuk ditampilkan via ONLYOFFICE
-// Tidak mengubah state, tidak perlu auth
 Route::post('/letters/preview', [PreviewController::class, 'generate']);
+// Bug 2+5: serve PDF surat untuk iframe di detail page (tanpa auth agar iframe bisa load)
+Route::get('/letters/{letter}/pdf-view', [LetterController::class, 'pdfView']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/letters/{letter}', [LetterController::class, 'show']);
@@ -34,14 +36,11 @@ Route::get('/user', function (Request $request) {
 })->middleware('auth:sanctum');
 
 Route::middleware('auth:sanctum')->group(function () {
-    
     Route::prefix('sync')->group(function () {
         Route::post('csv', [SyncController::class, 'csv']);
     });
-
-    Route::prefix('user')->group(function(){
+    Route::prefix('user')->group(function () {
         Route::post('signature', [UserController::class, 'uploadSignature']);
         Route::get('signature', [UserController::class, 'getSignature']);
     });
-
 });
