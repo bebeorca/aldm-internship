@@ -102,13 +102,31 @@ export default function MouTwoPage() {
       .finally(() => setLoadingList(false));
   }, []);
 
-  useEffect(() => {
-    const tid = searchParams.get('template_id');
-    if (!tid) return;
-    templateService.getById(Number(tid))
-      .then((res) => selectTemplate(res.data.data))
-      .catch(() => setListError('Template tidak ditemukan.'));
-  }, []);
+// Bug 1 fix: jika ada letter_id di URL → load data letter untuk edit/resubmit
+useEffect(() => {
+  const lid = searchParams.get('letter_id');
+  if (!lid) return;
+
+  letterService.getById(Number(lid))
+    .then((res) => {
+      const letter = res.data.data ?? res.data;
+      if (!letter) return;
+
+      // Set template dan pre-fill formData dari data surat yang rejected
+      setSelected(letter.template ?? null);
+      setFormData(letter.data_surat ?? {});
+      setCsvMsg(null);
+      setCsvFileName('');
+      setCsvRows([]);
+      setShowCsvPicker(false);
+      setSubmitError('');
+      setPdfUrl(null);
+      setStep('form');
+    })
+    .catch(() => {
+      // Gagal load letter — biarkan user pilih template manual
+    });
+}, []);
 
   // Debounce preview — generate PDF setiap formData berubah
   useEffect(() => {

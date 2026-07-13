@@ -25,16 +25,14 @@ class DocxGeneratorService
         $processor = new TemplateProcessor($templatePath);
         $processor->setMacroChars('{{', '}}'); // ← tambah ini: pakai {{key}} bukan ${key}
 
-        // Replace semua placeholder sesuai data
-        foreach ($data as $key => $value) {
-    $processor->setValue($key, $value ?? '');
+// Variabel yang diisi sistem (seperti tanda tangan) dikecualikan dari input user
+$reservedKeys = ['tanda_tangan', 'ttd', 'ttd_direktur', 'signature'];
+
+foreach ($data as $key => $value) {
+    if (!in_array(strtolower($key), $reservedKeys)) {
+        $processor->setValue($key, $value ?? '');
+    }
 }
-
-        // Replace semua placeholder sesuai data
-        foreach ($data as $key => $value) {
-            $processor->setValue($key, $value ?? '');
-        }
-
         // Sisipkan TTD direktur jika sudah upload
         $this->insertSignatureIfExists($processor);
 
@@ -67,7 +65,7 @@ class DocxGeneratorService
         $processor->setImageValue('tanda_tangan', [
             'path' => $signaturePath,
             'width' => 100,
-            'height' => 100,
+            'height' => 50,
             'ratio' => true,
         ]);
     }

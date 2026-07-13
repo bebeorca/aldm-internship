@@ -246,6 +246,7 @@ public function approve(Request $request, Letter $letter): JsonResponse
 
 /**
  * PATCH /api/letters/{letter}/reject
+ * Tolak Permanen — status menjadi 'rejected'
  */
 public function reject(Request $request, Letter $letter): JsonResponse
 {
@@ -284,7 +285,53 @@ public function reject(Request $request, Letter $letter): JsonResponse
 
     } catch (\Exception $e) {
         Log::error('Reject letter failed', ['letter_id' => $letter->id, 'error' => $e->getMessage()]);
-        return response()->json(['success' => false, 'message' => 'Gagal menolak surat.'], 500);
+        return response()->json(['success' => false, 'message' => 'Gagal menolak surat: ' . $e->getMessage()], 500);
+    }
+}
+
+/**
+ * PATCH /api/letters/{letter}/revise
+ * Minta Revisi — surat dikembalikan ke pembuat, status 'rejected' dengan catatan revisi
+ */
+public function revise(Request $request, Letter $letter): JsonResponse
+{
+    $request->validate([
+        'catatan' => 'required|string|max:1000',
+    ]);
+
+    $user = $request->user();
+    if (!$user) {
+        return response()->json(['success' => false, 'message' => 'Unauthorized.'], 401);
+    }
+
+    if ($letter->status !== 'pending_approval') {
+        return response()->json([
+            'success' => false,
+            'message' => 'Surat tidak dalam status menunggu persetujuan.',
+        ], 422);
+    }
+
+    try {
+        \App\Models\Approval::create([
+            'letter_id'   => $letter->id,
+            'reviewed_by' => $user->id,
+            'status'      => 'rejected',
+            'catatan'     => '[MINTA REVISI] ' . $request->input('catatan'),
+            'reviewed_at' => now(),
+        ]);
+
+        // Status kembali ke rejected — pembuat bisa edit dan kirim ulang
+        $letter->update(['status' => 'rejected']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Permintaan revisi berhasil dikirim.',
+            'data'    => $letter->fresh()->load(['template', 'creator', 'latestApproval.reviewer']),
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error('Revise letter failed', ['letter_id' => $letter->id, 'error' => $e->getMessage()]);
+        return response()->json(['success' => false, 'message' => 'Gagal mengirim revisi: ' . $e->getMessage()], 500);
     }
 }
 }

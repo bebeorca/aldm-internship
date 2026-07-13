@@ -2,13 +2,11 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Approval extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
         'letter_id',
         'reviewed_by',
@@ -21,33 +19,13 @@ class Approval extends Model
         'reviewed_at' => 'datetime',
     ];
 
-    // =========================================================
-    // RELASI
-    // =========================================================
-
-    /** Surat yang di-review */
-    public function letter()
+    public function letter(): BelongsTo
     {
-        return $this->belongsTo(Letter::class, 'letter_id');
+        return $this->belongsTo(Letter::class);
     }
 
-    /** Direktur yang mereview */
-    public function reviewer()
+    public function reviewer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by');
-    }
-
-    // =========================================================
-    // HELPER
-    // =========================================================
-
-    public function isApproved(): bool
-    {
-        return $this->status === 'approved';
-    }
-
-    public function isRejected(): bool
-    {
-        return $this->status === 'rejected';
     }
 }

@@ -110,7 +110,7 @@ class TemplateController extends Controller
 
         // Extract {{nama_variabel}} dari raw text
         preg_match_all('/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/', $rawContent, $varMatches);
-        $variabel = array_values(array_unique($varMatches[1]));
+        $variabel = $this->filterReservedVars(array_values(array_unique($varMatches[1])));
 
         return [$variabel, $rawContent];
     }
@@ -139,7 +139,7 @@ public function previewUpload(Request $request): JsonResponse
             preg_match_all('/<w:t[^>]*>(.*?)<\/w:t>/s', $xml, $matches);
             $raw = html_entity_decode(implode('', $matches[1]), ENT_QUOTES | ENT_XML1);
             preg_match_all('/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/', $raw, $varMatches);
-            $variabel = array_values(array_unique($varMatches[1]));
+            $variabel = $this->filterReservedVars(array_values(array_unique($varMatches[1])));
         }
     }
 
@@ -177,5 +177,19 @@ public function destroy(Template $template): JsonResponse
         'success' => true,
         'message' => 'Template berhasil dihapus.',
     ]);
+}
+/**
+ * Variabel yang dikelola sistem, bukan user input.
+ * Tidak boleh muncul sebagai form field di frontend.
+ * Akan diisi saat approval (tanda tangan) atau secara otomatis.
+ */
+private const RESERVED_VARS = ['tanda_tangan', 'ttd', 'ttd_direktur', 'signature'];
+
+private function filterReservedVars(array $variabel): array
+{
+    return array_values(array_filter(
+        $variabel,
+        fn($v) => !in_array(strtolower($v), self::RESERVED_VARS)
+    ));
 }
 }

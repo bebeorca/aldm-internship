@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import {
   ChevronLeft, Printer, Download, FileText,
-  CheckCircle2, Clock, XCircle, Loader2, AlertCircle,
+  CheckCircle2, Loader2, AlertCircle, Pencil,
 } from 'lucide-react';
 import { letterService } from '../../services/api';
 import type { Letter } from '../../types';
@@ -12,14 +12,18 @@ function statusBadge(status: string) {
   const map: Record<string, { label: string; className: string }> = {
     pending_approval: { label: 'Menunggu Persetujuan', className: 'bg-amber-100 text-amber-700' },
     approved:         { label: 'Disetujui',             className: 'bg-emerald-100 text-emerald-700' },
-    rejected:         { label: 'Ditolak',               className: 'bg-red-100 text-red-600' },
-    draft:            { label: 'Draft',                 className: 'bg-gray-100 text-gray-600' },
+    rejected:         { label: 'Ditolak / Perlu Revisi', className: 'bg-red-100 text-red-600' },
+    draft:            { label: 'Draft',                  className: 'bg-gray-100 text-gray-600' },
   };
   const s = map[status] ?? { label: status, className: 'bg-gray-100 text-gray-500' };
   return <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${s.className}`}>{s.label}</span>;
 }
 
-function ApprovalStep({ n, title, name, status }: { n: number; title: string; name?: string; status: 'done' | 'current' | 'pending' }) {
+function ApprovalStep({
+  n, title, name, sub, status,
+}: {
+  n: number; title: string; name?: string; sub?: string; status: 'done' | 'current' | 'pending';
+}) {
   return (
     <div className="flex items-start gap-3">
       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 mt-0.5 ${
@@ -31,7 +35,8 @@ function ApprovalStep({ n, title, name, status }: { n: number; title: string; na
       </div>
       <div>
         <p className={`text-sm font-medium ${status === 'pending' ? 'text-gray-400' : 'text-gray-700'}`}>{title}</p>
-        {name && <p className="text-xs text-gray-400 mt-0.5">{name}</p>}
+        {name && <p className="text-xs text-gray-500 mt-0.5">{name}</p>}
+        {sub && <p className="text-xs text-gray-400">{sub}</p>}
         <p className={`text-xs mt-0.5 ${
           status === 'done' ? 'text-emerald-500' :
           status === 'current' ? 'text-amber-500' :
@@ -48,13 +53,11 @@ export default function LetterDetailPage() {
   const { id }   = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const [letter, setLetter]     = useState<Letter | null>(null);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState('');
-  const [exporting, setExporting] = useState(false);
+  const [letter, setLetter]         = useState<Letter | null>(null);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState('');
   const [exportError, setExportError] = useState('');
 
-  // URL PDF yang di-serve oleh backend (tanpa auth — agar iframe bisa load)
   const pdfViewUrl = id ? `/api/letters/${id}/pdf-view#toolbar=0&navpanes=0` : null;
 
   useEffect(() => {
@@ -65,7 +68,7 @@ export default function LetterDetailPage() {
         const status = err?.response?.status;
         setError(
           status === 401 ? 'Akses tidak sah. Silakan login ulang.' :
-          status === 403 ? 'Anda tidak memiliki izin untuk melihat surat ini.' :
+          status === 403 ? 'Anda tidak memiliki izin melihat surat ini.' :
           status === 404 ? 'Surat tidak ditemukan.' :
           'Gagal memuat detail surat.'
         );
@@ -73,26 +76,25 @@ export default function LetterDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  const handleExport = async (format: 'pdf' | 'docx') => {
-    if (!letter) return;
-    setExporting(true);
+  // Bug 3 fix: PDF via pdf-view (no auth needed, auto-convert)
+  const handleExportPdf = () => {
     setExportError('');
-    try {
-      const res = await letterService.exportDoc(letter.id, format);
-      const mime = format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      const blob = new Blob([res.data], { type: mime });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
-      a.download = `${letter.nomor_surat ?? 'surat'}.${format}`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err: any) {
-      const msg = err?.response?.data?.message ?? `Gagal mengunduh ${format.toUpperCase()}.`;
-      setExportError(msg);
-    } finally {
-      setExporting(false);
+    window.open(`/api/letters/${letter!.id}/pdf-view`, '_blank');
+  };
+
+  // Bug 3 fix: DOCX via direct storage URL (publicly accessible via /storage/ proxy)
+  const handleExportDocx = () => {
+    setExportError('');
+    if (!letter?.path_docx) {
+      setExportError('File DOCX tidak tersedia.');
+      return;
     }
+    const a = document.createElement('a');
+    a.href = `/storage/${letter.path_docx}`;
+    a.download = `${letter.nomor_surat ?? 'surat'}.docx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   if (loading) {
@@ -123,16 +125,11 @@ export default function LetterDetailPage() {
   if (!letter) return null;
 
   const isApproved = letter.status === 'approved';
+  const isRejected = letter.status === 'rejected';
 
-  // Tentukan step approval berdasarkan status surat dan latestApproval
-  const approvalSteps = [
-    { title: 'Admin Tata Usaha', name: letter.creator?.nama },
-    { title: 'Kepala Departemen', name: letter.latestApproval?.reviewer?.nama },
-    { title: 'Direktur', name: undefined },
-  ];
   const approvalStatus = (idx: number): 'done' | 'current' | 'pending' => {
-    if (letter.status === 'approved') return 'done';
-    if (letter.status === 'rejected') return idx === 0 ? 'done' : idx === 1 ? 'current' : 'pending';
+    if (isApproved) return 'done';
+    if (isRejected) return idx === 0 ? 'done' : idx === 1 ? 'current' : 'pending';
     if (letter.status === 'pending_approval') return idx === 0 ? 'done' : idx === 1 ? 'current' : 'pending';
     return 'pending';
   };
@@ -151,28 +148,51 @@ export default function LetterDetailPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-semibold text-gray-800">Detail Surat</h1>
-        <div className="flex items-center gap-2">
-          <button onClick={() => window.print()} className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors">
+        <div className="flex items-center gap-2 flex-wrap">
+
+          {/* Bug 1 fix: tombol Edit Surat jika status rejected */}
+          {isRejected && (
+            <button
+              onClick={() => navigate(
+                `/letters/create/mou2?template_id=${letter.template_id}&letter_id=${letter.id}`
+              )}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm bg-amber-500 text-white rounded-xl hover:bg-amber-600 transition-colors"
+            >
+              <Pencil size={14} /> Edit & Kirim Ulang
+            </button>
+          )}
+
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+          >
             <Printer size={14} /> Cetak
           </button>
+
+          {/* Bug 3 fix: PDF — buka pdf-view di tab baru (auto-convert, no auth) */}
           <button
-            onClick={() => handleExport('pdf')}
-            disabled={!isApproved || exporting}
-            title={!isApproved ? 'Hanya tersedia setelah surat disetujui' : ''}
+            onClick={handleExportPdf}
+            disabled={!isApproved}
+            title={!isApproved ? 'Hanya tersedia setelah disetujui' : 'Unduh PDF'}
             className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-            Unduh PDF
+            <Download size={14} /> Unduh PDF
           </button>
+
+          {/* Bug 3 fix: DOCX — direct /storage/ URL */}
           <button
-            onClick={() => handleExport('docx')}
-            disabled={!isApproved || exporting}
-            title={!isApproved ? 'Hanya tersedia setelah surat disetujui' : ''}
+            onClick={handleExportDocx}
+            disabled={!isApproved}
+            title={!isApproved ? 'Hanya tersedia setelah disetujui' : 'Unduh DOCX'}
             className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             <FileText size={14} /> DOCX
           </button>
-          <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors">
+
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+          >
             <ChevronLeft size={14} /> Kembali
           </button>
         </div>
@@ -185,26 +205,37 @@ export default function LetterDetailPage() {
         </div>
       )}
 
+      {/* Catatan revisi jika rejected */}
+      {isRejected && letter.latestApproval?.catatan && (
+        <div className="mb-5 flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <AlertCircle size={16} className="shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium mb-0.5">Catatan dari Reviewer:</p>
+            <p>{letter.latestApproval.catatan}</p>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-3 gap-6">
 
-        {/* ─── Kiri: PDF Pratinjau Surat (Bug 2: real content dari DOCX) ─── */}
+        {/* Kiri: PDF Preview */}
         <div className="col-span-2">
-          <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white" style={{ minHeight: '700px' }}>
+          <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white" style={{ height: '750px' }}>
             {pdfViewUrl ? (
               <iframe
                 src={pdfViewUrl}
                 title="Isi Surat"
-                style={{ width: '100%', height: '700px', border: 'none', display: 'block' }}
+                style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
               />
             ) : (
-              <div className="flex items-center justify-center h-full py-20 text-gray-300">
+              <div className="flex items-center justify-center h-full text-gray-300">
                 <p className="text-sm">Preview tidak tersedia</p>
               </div>
             )}
           </div>
         </div>
 
-        {/* ─── Kanan: Info + Approval Flow ─── */}
+        {/* Kanan: Info + Data Isian + Alur */}
         <div className="space-y-5">
 
           {/* Informasi Surat */}
@@ -221,7 +252,7 @@ export default function LetterDetailPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-xs text-gray-400">Jenis</span>
-                <span className="text-xs text-gray-700">{letter.template?.jenis_surat ?? letter.template_id}</span>
+                <span className="text-xs text-gray-700">{letter.template?.jenis_surat ?? '—'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-xs text-gray-400">Template</span>
@@ -234,13 +265,17 @@ export default function LetterDetailPage() {
               <div className="flex justify-between">
                 <span className="text-xs text-gray-400">Tanggal</span>
                 <span className="text-xs text-gray-700">
-                  {letter.created_at ? new Date(letter.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                  {letter.created_at
+                    ? new Date(letter.created_at).toLocaleDateString('id-ID', {
+                        day: 'numeric', month: 'short', year: 'numeric',
+                      })
+                    : '—'}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Data Surat (variabel yang diisi) */}
+          {/* Data Isian */}
           {letter.data_surat && Object.keys(letter.data_surat).length > 0 && (
             <div className="bg-white border border-gray-200 rounded-xl p-5">
               <h3 className="text-sm font-semibold text-gray-700 mb-4">Data Isian</h3>
@@ -248,7 +283,7 @@ export default function LetterDetailPage() {
                 {Object.entries(letter.data_surat).map(([key, val]) => (
                   <div key={key} className="flex gap-2">
                     <span className="text-xs text-gray-400 w-28 shrink-0 capitalize">{key.replace(/_/g, ' ')}</span>
-                    <span className="text-xs text-gray-700 flex-1">{val || '—'}</span>
+                    <span className="text-xs text-gray-700 flex-1 break-words">{String(val) || '—'}</span>
                   </div>
                 ))}
               </div>
@@ -259,7 +294,11 @@ export default function LetterDetailPage() {
           <div className="bg-white border border-gray-200 rounded-xl p-5">
             <h3 className="text-sm font-semibold text-gray-700 mb-4">Alur Persetujuan</h3>
             <div className="space-y-4">
-              {approvalSteps.map((s, i) => (
+              {[
+                { title: 'Admin Tata Usaha', name: letter.creator?.nama },
+                { title: 'Kepala Departemen', name: letter.latestApproval?.reviewer?.nama },
+                { title: 'Direktur' },
+              ].map((s, i) => (
                 <ApprovalStep
                   key={i}
                   n={i + 1}
