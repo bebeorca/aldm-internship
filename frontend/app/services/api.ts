@@ -26,12 +26,11 @@ api.interceptors.response.use(
 );
 
 export const templateService = {
-  getAll:  ()              => api.get('/templates'),
-  getById: (id: number)    => api.get(`/templates/${id}`),
-  create:  (data: FormData) =>
-    api.post('/templates', data, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+  getAll:   ()              => api.get('/templates'),
+  getById:  (id: number)    => api.get(`/templates/${id}`),
+  create:   (data: FormData) =>
+    api.post('/templates', data, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  delete:   (id: number)    => api.delete(`/templates/${id}`),   // ← tambah
 };
 
 export const letterService = {

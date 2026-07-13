@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router';
 import {
   ChevronLeft, Loader2, FileText, Upload, Tag,
   CheckCircle2, AlertCircle, Check, X,
+  Trash2,
 } from 'lucide-react';
 import { letterService, templateService } from '../../services/api';
 import type { Template } from '../../types';
@@ -75,6 +76,8 @@ export default function MouTwoPage() {
 
   const [selected, setSelected]         = useState<Template | null>(null);
   const [formData, setFormData]         = useState<Record<string, string>>({});
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [deleting, setDeleting]               = useState(false);  
 
   // PDF preview
   const [pdfUrl, setPdfUrl]                   = useState<string | null>(null);
@@ -183,27 +186,27 @@ export default function MouTwoPage() {
   };
 
   const handleSelectCsvRow = (index: number) => {
-    const row = csvRows[index];
-    if (!row) return;
-
-    const matched: string[] = [];
-    setFormData((prev) => {
-      const updated = { ...prev };
-      Object.keys(updated).forEach((k) => {
-        if (row[k] !== undefined) {
-          updated[k] = row[k];
-          matched.push(k);
-        }
-      });
-      return updated;
+  const row = csvRows[index];
+  if (!row) return;
+  
+  const matched: string[] = [];
+  setFormData((prev) => {
+    const updated = { ...prev };
+    Object.keys(updated).forEach((k) => {
+      if (row[k] !== undefined) {
+        updated[k] = row[k];
+        matched.push(k);
+      }
     });
+    return updated;
+  });
 
-    setCsvMsg({
-      type: 'success',
-      text: `Baris ${index + 1} berhasil diisi: ${matched.map(formatLabel).join(', ')}.`,
-    });
-    setShowCsvPicker(false);
-  };
+  setCsvMsg({
+    type: 'success',
+    text: `Baris ${index + 1} berhasil diisi. Pilih baris lain atau tutup dengan ✕`,
+  });
+  // Bug 2 fix: JANGAN tutup picker — user bisa pilih baris lain tanpa harus buka ulang
+};
 
   const handleSubmit = async () => {
     if (!selected) return;
@@ -225,6 +228,20 @@ export default function MouTwoPage() {
       setSubmitting(false);
     }
   };
+  const handleDeleteTemplate = async () => {
+  if (!deleteConfirmId) return;
+  setDeleting(true);
+  try {
+    await templateService.delete(deleteConfirmId);
+    setTemplates((prev) => prev.filter((t) => t.id !== deleteConfirmId));
+    setDeleteConfirmId(null);
+  } catch {
+    // silent — template mungkin sudah dihapus
+    setDeleteConfirmId(null);
+  } finally {
+    setDeleting(false);
+  }
+};
 
   const nomorSurat = `ND/ALDM/VI/2026/${String(selected?.id ?? 0).padStart(3, '0')}`;
 
@@ -258,31 +275,78 @@ export default function MouTwoPage() {
                     {tpl.jenis_surat}
                   </span>
                 </div>
-                <div className="p-4">
-                  <p className="text-sm font-medium text-gray-800 truncate">{tpl.nama}</p>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <Tag size={11} className="text-gray-400" />
-                    <span className="text-xs text-gray-400">{tpl.variabel.length} variabel</span>
-                  </div>
-                  {tpl.variabel.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {tpl.variabel.slice(0, 2).map((v) => (
-                        <span key={v} className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-mono">{`{{${v}}}`}</span>
-                      ))}
-                      {tpl.variabel.length > 2 && <span className="text-[10px] text-gray-400">+{tpl.variabel.length - 2}</span>}
-                    </div>
-                  )}
-                  <button
-                    onClick={() => selectTemplate(tpl)}
-                    className="w-full mt-3 text-xs font-medium py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:border-emerald-300 hover:text-emerald-700 transition-colors"
-                  >
-                    Gunakan
-                  </button>
-                </div>
+<div className="p-4">
+  <p className="text-sm font-medium text-gray-800 truncate">{tpl.nama}</p>
+  <div className="flex items-center gap-1.5 mt-1">
+    <Tag size={11} className="text-gray-400" />
+    <span className="text-xs text-gray-400">{tpl.variabel.length} variabel</span>
+  </div>
+  {tpl.variabel.length > 0 && (
+    <div className="flex flex-wrap gap-1 mt-2">
+      {tpl.variabel.slice(0, 2).map((v) => (
+        <span key={v} className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-mono">{`{{${v}}}`}</span>
+      ))}
+      {tpl.variabel.length > 2 && <span className="text-[10px] text-gray-400">+{tpl.variabel.length - 2}</span>}
+    </div>
+  )}
+  {/* Bug 4: tombol Gunakan + icon hapus */}
+  <div className="flex items-center gap-2 mt-3">
+    <button
+      onClick={() => selectTemplate(tpl)}
+      className="flex-1 text-xs font-medium py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:border-emerald-300 hover:text-emerald-700 transition-colors"
+    >
+      Gunakan
+    </button>
+    <button
+      onClick={() => setDeleteConfirmId(tpl.id)}
+      className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+      title="Hapus template"
+    >
+      <Trash2 size={14} />
+    </button>
+  </div>
+</div>
               </div>
             ))}
           </div>
         )}
+        {/* Bug 4: Konfirmasi hapus template */}
+{deleteConfirmId !== null && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center shrink-0">
+          <Trash2 size={18} className="text-red-500" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-gray-800">Hapus Template?</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Template dan file DOCX-nya akan dihapus permanen.
+          </p>
+        </div>
+      </div>
+      <p className="text-xs text-gray-500 mb-5 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+        Tindakan ini tidak dapat dibatalkan. Surat yang sudah dibuat menggunakan template ini tidak terpengaruh.
+      </p>
+      <div className="flex gap-3">
+        <button
+          onClick={() => setDeleteConfirmId(null)}
+          className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+        >
+          Batal
+        </button>
+        <button
+          onClick={handleDeleteTemplate}
+          disabled={deleting}
+          className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 text-sm bg-red-500 text-white rounded-xl hover:bg-red-600 disabled:opacity-60 transition-colors"
+        >
+          {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+          {deleting ? 'Menghapus...' : 'Ya, Hapus'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       </PageShell>
     );
   }
@@ -443,7 +507,7 @@ export default function MouTwoPage() {
           )}
 
           {/* PDF Iframe — Bug 1: #toolbar=0&navpanes=0 sudah di-set di setPdfUrl */}
-          <div className="flex-1 border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white" style={{ minHeight: '600px' }}>
+          <div className="flex-1 border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white" style={{ height: '750px' }}>
             {loadingPreview && (
               <div className="flex flex-col items-center justify-center h-full py-20 text-gray-300 gap-3">
                 <Loader2 size={22} className="animate-spin" />
@@ -472,7 +536,7 @@ export default function MouTwoPage() {
                 key={pdfUrl}
                 src={pdfUrl}
                 title="Pratinjau Surat"
-                style={{ width: '100%', height: '600px', border: 'none', display: 'block' }}
+                style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
               />
             )}
           </div>

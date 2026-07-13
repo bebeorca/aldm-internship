@@ -161,4 +161,21 @@ public function previewUpload(Request $request): JsonResponse
         ],
     ]);
 }
+/**
+ * DELETE /api/templates/{id}
+ */
+public function destroy(Template $template): JsonResponse
+{
+    // Hapus file DOCX dari storage
+    if ($template->path_docx) {
+        Storage::disk('public')->delete($template->path_docx);
+    }
+
+    $template->delete();
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Template berhasil dihapus.',
+    ]);
+}
 }

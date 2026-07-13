@@ -11,8 +11,7 @@ import { usePendingCount } from '../hooks/usePendingCount';
 import { useRevisionCount } from '../hooks/useRevisionCount';
 
 const SUBMENU_ITEMS = [
-  { to: '/letters/create/mou', label: 'MoU' },
-  { to: '/letters/create/mou2', label: 'MoU 2' },
+  { to: '/letters/create/mou2', label: 'MoU' },   // ← hapus MoU lama, rename MoU 2 → MoU
 ];
 
 // Route yang HANYA boleh diakses oleh direktur

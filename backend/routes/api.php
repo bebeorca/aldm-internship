@@ -17,6 +17,7 @@ Route::get('/templates/{template}', [TemplateController::class, 'show']);
 Route::post('/templates', [TemplateController::class, 'store']);
 // Bug 4: preview template sebelum disimpan (LibreOffice, tanpa auth)
 Route::post('/templates/preview-upload', [TemplateController::class, 'previewUpload']);
+Route::delete('/templates/{template}', [TemplateController::class, 'destroy']); 
 
 Route::get('/letters', [LetterController::class, 'index']);
 Route::post('/letters/preview', [PreviewController::class, 'generate']);

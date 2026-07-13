@@ -67,7 +67,7 @@ class DocxGeneratorService
         $processor->setImageValue('tanda_tangan', [
             'path' => $signaturePath,
             'width' => 100,
-            'height' => 50,
+            'height' => 100,
             'ratio' => true,
         ]);
     }
