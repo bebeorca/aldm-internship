@@ -38,7 +38,8 @@ export const letterService = {
   getById:   (id: number)                   => api.get(`/letters/${id}`),
   create:    (data: Record<string, any>)    => api.post('/letters', data),
   approve:   (id: number, catatan?: string) => api.patch(`/letters/${id}/approve`, { catatan }),
-  reject:    (id: number, catatan: string)  => api.patch(`/letters/${id}/reject`, { catatan }),
+  reject: (id: number, catatan: string) => api.patch(`/letters/${id}/reject`, { catatan }),
+  revise: (id: number, catatan: string) => api.patch(`/letters/${id}/revise`, { catatan }),
   exportDoc: (id: number, format: 'docx' | 'pdf') =>
     api.get(`/letters/${id}/export`, { params: { format }, responseType: 'blob' }),
   syncCsv:   (file: File) => {

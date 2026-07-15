@@ -180,11 +180,11 @@ function ApprovalModal({
     setLoading(true);
     setError('');
     try {
-      await letterService.reject(letter.id, {
-        catatan,
-        action: rejectAction,
-      } as any);
-      onDone();
+      if (rejectAction === 'revision') {
+    await letterService.revise(letter.id, catatan);
+  } else {
+    await letterService.reject(letter.id, catatan);
+  }
     } catch {
       setError('Gagal mengirim keputusan. Coba lagi.');
     } finally {
